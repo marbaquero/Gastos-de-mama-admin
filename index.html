@@ -1,86 +1,319 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gastos de Mamá</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-</head>
-<body style="background:#f6f5f8">
-<div id="root"></div>
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<script type="text/babel">
-const initialData=[
- {id:101,fecha:"2026-09-12",monto:32.37,descripcion:"Santa Maria",tipo:"gasto",foto:null,lugar:"Santa Maria"},
- {id:102,fecha:"2026-09-12",monto:9.02,descripcion:"compras de casa",tipo:"gasto",foto:null,lugar:""},
- {id:103,fecha:"2026-09-11",monto:3.03,descripcion:"Enterogermina",tipo:"gasto",foto:null,lugar:""},
- {id:201,fecha:"2026-09-10",monto:100,descripcion:"Depósito",tipo:"deposito",foto:null,lugar:""}
-];
-function App(){
-  const [gastos,setGastos]=React.useState(()=>{try{const s=localStorage.getItem('gastos_mama_github');return s?JSON.parse(s):initialData}catch{return initialData}});
-  const [fecha,setFecha]=React.useState("2026-09-12");
-  const [monto,setMonto]=React.useState(""); const [desc,setDesc]=React.useState(""); const [lugar,setLugar]=React.useState("");
-  const [foto,setFoto]=React.useState(null); const [ocrLoading,setOcrLoading]=React.useState(false); const [ocrProgress,setOcrProgress]=React.useState(0);
-  const [showSaldo,setShowSaldo]=React.useState(false);
-  const [saldoManual,setSaldoManual]=React.useState(()=>localStorage.getItem('saldo_manual_github')||"");
-  React.useEffect(()=>{localStorage.setItem('gastos_mama_github',JSON.stringify(gastos))},[gastos]);
-  const saldoCalc=React.useMemo(()=>{let dep=0,gas=0;gastos.forEach(g=>{if(g.tipo==='deposito')dep+=g.monto;else gas+=g.monto});return 60+dep-gas},[gastos]);
-  const saldo=saldoManual?parseFloat(saldoManual):saldoCalc;
-  const handleFoto=async(e)=>{
-    const file=e.target.files[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=async(ev)=>{
-      const b64=ev.target.result; setFoto(b64); setOcrLoading(true);
-      try{
-        const res=await Tesseract.recognize(b64,'spa+eng',{logger:m=>{if(m.status==='recognizing text')setOcrProgress(Math.round(m.progress*100))}});
-        const text=res.data.text;
-        const totalMatch=text.match(/total.*?\$?\s*(\d+[\.,]\d{2})/i);
-        let md=totalMatch?totalMatch[1]:null;
-        if(!md){const ms=[...text.matchAll(/\$?\s*(\d+[\.,]\d{2})/g)].map(m=>m[1]); if(ms.length) md=ms[ms.length-1];}
-        if(md) setMonto(md.replace(',','.'));
-        const fm=text.match(/(\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4})/);
-        if(fm){const p=fm[1].split(/[\/-]/); const iso=`${p[2].length===4?p[2]:'20'+p[2]}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`; setFecha(iso);}
-        const lines=text.split('\n').map(l=>l.trim()).filter(l=>l.length>4);
-        if(lines[0]){ setLugar(lines[0].substring(0,35)); setDesc(lines[0].substring(0,35)); }
-      }catch{} setOcrLoading(false);
-    }; reader.readAsDataURL(file);
-  };
-  return (
-    <div className="max-w-md mx-auto px-4 py-6">
-      <h1 className="text-[28px] font-extrabold mb-4">Gastos de Mamá</h1>
-      <div className="bg-white rounded-[20px] p-5 shadow-sm mb-4" onClick={()=>setShowSaldo(true)}>
-        <div className="text-[13px] text-gray-500">Saldo disponible <span className="bg-gray-100 rounded-full px-2 py-1 ml-2">✏️ Editar</span></div>
-        <div className="text-[36px] font-black">${saldo.toFixed(2)}</div>
-      </div>
-      {showSaldo && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
-            <h3 className="font-bold mb-2">Ajustar saldo real</h3>
-            <p className="text-sm text-gray-500 mb-3">Sistema dice ${saldoCalc.toFixed(2)} pero tienes $180 en mano</p>
-            <input value={saldoManual} onChange={e=>setSaldoManual(e.target.value)} placeholder="180" className="w-full border rounded-xl px-4 h-12 text-lg font-bold" />
-            <div className="flex gap-2 mt-4"><button onClick={()=>{setSaldoManual(""); setShowSaldo(false)}} className="flex-1 border rounded-xl h-12">Quitar</button><button onClick={()=>setShowSaldo(false)} className="flex-1 bg-black text-white rounded-xl h-12">Guardar</button></div>
-          </div>
-        </div>
-      )}
-      <div className="bg-white rounded-[28px] p-6 shadow-sm">
-        <h2 className="font-bold text-[20px]">Registrar gasto</h2>
-        <p className="text-[13px] text-gray-500 mb-4">Toma foto del recibo y se auto-llena</p>
-        <div className="flex gap-2 mb-3"><input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} className="flex-1 border rounded-xl px-3 h-12" /><button onClick={()=>setFecha(new Date().toISOString().split('T')[0])} className="bg-[#eef0ff] text-indigo-700 rounded-xl px-3">Hoy</button></div>
-        <input value={monto} onChange={e=>setMonto(e.target.value)} placeholder="0,00" className="w-full border rounded-xl px-4 h-12 mb-3 font-semibold" />
-        <textarea value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Descripción" className="w-full border rounded-xl px-4 py-3 mb-3"></textarea>
-        <input value={lugar} onChange={e=>setLugar(e.target.value)} placeholder="Lugar de consumo" className="w-full border rounded-xl px-4 h-12 mb-3" />
-        <div className="relative mb-3"><input type="file" accept="image/*" capture="environment" onChange={handleFoto} className="absolute inset-0 opacity-0 w-full h-full"/><div className="border-2 border-dashed border-indigo-200 bg-indigo-50/60 rounded-xl p-4 text-center text-indigo-700 font-semibold">📷 Tomar foto del recibo</div></div>
-        {ocrLoading && <div className="bg-indigo-50 rounded-xl p-3 mb-3 text-sm text-indigo-700">🔍 Leyendo recibo... {ocrProgress}%</div>}
-        {foto && <img src={foto} className="w-full h-40 object-cover rounded-xl mb-3" />}
-        <button onClick={()=>{const m=parseFloat(monto); if(!m) return; setGastos(p=>[{id:Date.now(),fecha,monto:m,descripcion:desc,lugar,tipo:'gasto',foto},...p]); setMonto(""); setDesc(""); setLugar(""); setFoto(null);}} className="w-full bg-black text-white rounded-2xl h-12 font-semibold">Guardar gasto</button>
-      </div>
-    </div>
-  );
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Gastos de Mamá — Administrador</title>
+<style>
+*{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f3f4f6;color:#111}
+.w{max-width:860px;margin:auto;padding:14px}.c{background:#fff;border-radius:18px;padding:18px;margin:12px 0;position:relative}
+h1{font-size:28px}.bal{font-size:38px;font-weight:800}.mut{color:#68707d;font-size:14px}
+label{display:block;font-weight:700;margin:14px 0 6px}input,select,button{width:100%;font:inherit;border-radius:12px}
+input,select{padding:13px;border:1px solid #ccd0d5;background:#fff}button{padding:14px;border:0;background:#111;color:#fff;font-weight:800;margin-top:14px;cursor:pointer}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hide{display:none}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;border-bottom:1px solid #eee;text-align:left;vertical-align:middle}
+.m{text-align:right}.dep{color:#067647}.gas{color:#b42318}
+.del{background:#fee2e2;color:#991b1b;padding:6px 10px;margin:0;width:auto;border-radius:8px}
+.btn-edit{background:#eef2ff;color:#3730a3;padding:6px 10px;margin:0;width:auto;border-radius:8px}
+.btn-small{padding:7px 9px;margin:0;width:auto;font-size:13px}
+.msg{padding:10px;border-radius:10px;background:#ecfdf3;color:#067647;margin:10px 0}.err{background:#fef3f2;color:#b42318}
+.summary{line-height:1.75}.rt{text-align:center;margin-bottom:2px}.rp{text-align:center;color:#68707d;margin-top:0}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.toolbar button{width:auto;padding:10px 14px;margin:0;font-size:14px}
+.toolbar .danger{background:#fff1f2;color:#991b1b;border:1px solid #fecdd3}
+.row-actions{display:flex;gap:6px;justify-content:flex-end}
+/* Modal */
+#editOverlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+#editOverlay.open{display:flex}
+#editBox{background:#fff;border-radius:18px;padding:20px;width:100%;max-width:420px}
+@media(max-width:520px){.grid{grid-template-columns:1fr}.bal{font-size:34px}}
+@media print{body{background:#fff}.w{max-width:none}#top,#depositCard,#allCard,#reportControls,#msg,#editOverlay{display:none!important}#reportCard{display:block!important;margin:0;padding:0}button{display:none!important}}
+</style></head>
+<body><main class="w">
+<div id="top"><h1>Gastos de Mamá — Administrador</h1></div><div id="msg"></div>
+
+<div class="c"><div class="mut">Saldo disponible</div><div class="bal" id="abal">$0.00</div>
+<p>Total gastos: <b id="tg">$0.00</b><br>Total depósitos: <b id="td">$0.00</b></p></div>
+
+<div class="c" id="depositCard"><h2>Nuevo depósito</h2>
+<label>Fecha</label><input id="df" type="date">
+<label>Monto</label><input id="dm" type="number" inputmode="decimal" step=".01">
+<label>Descripción</label><input id="dd" value="Depósito">
+<button id="sd">Agregar depósito</button></div>
+
+<div class="c" id="reportControls"><h2>Reporte mensual</h2>
+<div class="grid"><div><label>Mes</label><select id="rm"></select></div><div><label>Año</label><select id="ry"></select></div></div>
+<button id="gr">Generar reporte</button></div>
+
+<div class="c hide" id="reportCard">
+<h2 class="rt">Gastos de Mamá</h2><p class="rp" id="rperiod"></p>
+<div class="summary">
+Saldo inicial: <b id="ri"></b><br>
+Gastos del mes: <b id="re"></b><br>
+Depósitos del mes: <b id="rd"></b><br>
+Saldo del mes: <b id="rn"></b><br>
+Saldo final acumulado: <b id="rf"></b>
+</div>
+<div id="rtable" style="margin-top:14px"></div>
+<button id="pdf">Generar PDF / Imprimir</button></div>
+
+
+<div class="c" id="allCard">
+<h2>Todos los movimientos</h2>
+<div class="toolbar" style="align-items:center">
+<button id="fTodos" class="btn-small" style="background:#111;color:#fff">Todos</button>
+<button id="fGastos" class="btn-small" style="background:#fff;border:1px solid #ddd;color:#111">Solo gastos</button>
+<button id="fDepositos" class="btn-small" style="background:#fff;border:1px solid #ddd;color:#111">Solo depósitos</button>
+<select id="fMes" class="btn-small" style="width:auto;padding:10px;border:1px solid #ddd;background:#fff"><option value="">Todos los meses</option></select>
+</div>
+<div class="toolbar">
+<button id="selAll" class="btn-small" style="background:#111;color:#fff">Seleccionar todo</button>
+<button id="deselAll" class="btn-small" style="background:#111;color:#fff">Deseleccionar</button>
+<button id="delSel" class="btn-small danger">Eliminar seleccionados</button>
+</div>
+<div id="all"></div>
+</div>
+
+<div class="c" id="depositHistoryCard">
+<h2>Historial de depósitos por mes</h2>
+<p class="mut">Aquí ves todos los depósitos que has hecho, agrupados por mes. Te sirve para revisar meses anteriores.</p>
+<div id="depHist"></div>
+</div>
+
+</main>
+
+<!-- Modal Editar -->
+<div id="editOverlay"><div id="editBox">
+<h2 style="margin-top:0">Editar movimiento</h2>
+<label>Fecha</label><input id="ef" type="date">
+<label>Tipo</label><select id="et"><option value="gasto">Gasto</option><option value="deposito">Depósito</option></select>
+<label>Monto</label><input id="em" type="number" inputmode="decimal" step=".01">
+<label>Descripción</label><input id="ed" type="text">
+<div class="grid" style="margin-top:12px">
+<button id="saveEdit">Guardar cambios</button>
+<button id="cancelEdit" style="background:#e5e7eb;color:#111">Cancelar</button>
+</div>
+</div></div>
+
+<script>
+const U='https://ywegbbdnphbbqiimqhqf.supabase.co',K='sb_publishable_3RLMrZi5yuz9kxeAiMkSMw_y4foVtyu',H={apikey:K,Authorization:'Bearer '+K,'Content-Type':'application/json'},$=x=>document.getElementById(x),money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0),today=()=>new Date().toISOString().slice(0,10);
+const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+$('df').value=today();
+
+let ALL_DATA = [];
+let editingId = null;
+
+async function api(p,o={}){let r=await fetch(U+'/rest/v1/'+p,{...o,headers:{...H,...(o.headers||{})}});if(!r.ok)throw Error(await r.text());let t=await r.text();return t?JSON.parse(t):null}
+async function verRecibo(path){
+ if(!path)return;
+ try{
+  const r=await fetch(U+'/storage/v1/object/sign/recibos/'+encodeURI(path),{
+   method:'POST',
+   headers:{apikey:K,Authorization:'Bearer '+K,'Content-Type':'application/json'},
+   body:JSON.stringify({expiresIn:300})
+  });
+  if(!r.ok)throw Error(await r.text());
+  const j=await r.json(), signed=j.signedURL||j.signedUrl;
+  if(!signed)throw Error('No signed URL');
+  window.open(U+'/storage/v1'+signed,'_blank');
+ }catch(e){console.error(e);note('No se pudo abrir el recibo.',true)}
 }
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-</script>
-</body>
-</html>
+function note(t,e=false){$('msg').className='msg'+(e?' err':'');$('msg').textContent=t;setTimeout(()=>{$('msg').className='';$('msg').textContent=''},3500)}
+
+
+
+let FILTRO_TIPO='todos';
+let FILTRO_MES='';
+let MES_DETALLE_DEPOSITOS='';
+
+function tab(a){
+ if(!a.length)return '<span class="mut">Sin movimientos en este filtro.</span>';
+ return '<table><tr><th></th><th>Fecha</th><th>Descripción</th><th class="m">Monto</th><th>Recibo</th><th></th></tr>'+
+ a.map(x=>`<tr>
+ <td><input type="checkbox" class="chk" data-id="${x.id}"></td>
+ <td>${x.fecha}</td>
+ <td>${x.descripcion||''}</td>
+ <td class="m ${x.tipo==='deposito'?'dep':'gas'}">${x.tipo==='deposito'?'+':'-'}${money(x.monto)}</td>
+ <td>${x.recibo_url?`<button type="button" class="btn-small" style="background:#111;color:#fff" onclick='verRecibo(${JSON.stringify(x.recibo_url)})'>Ver recibo</button>`:''}</td>
+ <td><div class="row-actions">
+   <button class="btn-edit" onclick="openEdit(${x.id})">✎</button>
+   <button class="del" onclick="del(${x.id})">×</button>
+ </div></td>
+ </tr>`).join('')+'</table>';
+}
+
+function aplicarFiltros(){
+  let f=[...ALL_DATA];
+  if(FILTRO_TIPO!=='todos') f=f.filter(x=>x.tipo===FILTRO_TIPO);
+  if(FILTRO_MES) f=f.filter(x=>x.fecha.startsWith(FILTRO_MES));
+  $('all').innerHTML=tab(f);
+}
+
+function renderDepositHistory(){
+  const depositos = ALL_DATA.filter(x=>x.tipo==='deposito');
+  if(!depositos.length){ $('depHist').innerHTML='<p class="mut">Aún no hay depósitos.</p>'; return; }
+  const grupos={};
+  depositos.forEach(x=>{
+    const ym=x.fecha.slice(0,7);
+    if(!grupos[ym]) grupos[ym]={total:0,items:[]};
+    grupos[ym].total+=+x.monto;
+    grupos[ym].items.push(x);
+  });
+  const meses = Object.keys(grupos).sort().reverse();
+  const sel=$('fMes');
+  if(sel.options.length===1){
+    meses.forEach(ym=>{
+      const [y,m]=ym.split('-');
+      const opt=document.createElement('option');
+      opt.value=ym; opt.textContent=`${MONTHS[parseInt(m)-1]} ${y} — ${money(grupos[ym].total)}`;
+      sel.appendChild(opt);
+    });
+  }
+  let htm='<table><tr><th>Mes</th><th class="m">Total depositado</th><th>Cantidad</th><th></th></tr>';
+  meses.forEach(ym=>{
+    const [y,m]=ym.split('-');
+    const activo = MES_DETALLE_DEPOSITOS===ym ? ' style="background:#f3f4f6"' : '';
+    htm+=`<tr${activo}><td><b>${MONTHS[parseInt(m)-1]} ${y}</b></td><td class="m dep">${money(grupos[ym].total)}</td><td>${grupos[ym].items.length} depósitos</td><td><button class="btn-small" style="background:#111;color:#fff;width:auto" onclick="verDepositosDelMes('${ym}')">Ver</button></td></tr>`;
+  });
+  htm+='</table>';
+  const mesMostrar = MES_DETALLE_DEPOSITOS || (meses[0] || '');
+  const itemsMostrar = mesMostrar ? grupos[mesMostrar]?.items || [] : depositos.slice(0,20);
+  const [ySel,mSel] = mesMostrar ? mesMostrar.split('-') : ['',''];
+  const titulo = mesMostrar ? `Depósitos de ${MONTHS[parseInt(mSel)-1]} ${ySel} — Total ${money(grupos[mesMostrar].total)}` : 'Últimos 20 depósitos';
+  htm+=`<div style="margin-top:16px"><h3 style="margin:8px 0">${titulo}</h3>`;
+  htm+='<table><tr><th>Fecha</th><th>Descripción</th><th class="m">Monto</th></tr>';
+  if(!itemsMostrar.length){
+    htm+=`<tr><td colspan="3" class="mut">No hay depósitos en este mes</td></tr>`;
+  } else {
+    itemsMostrar.sort((a,b)=>a.fecha.localeCompare(b.fecha)).forEach(x=>{
+      htm+=`<tr><td>${x.fecha}</td><td>${x.descripcion||''}</td><td class="m dep">+${money(x.monto)}</td></tr>`;
+    });
+  }
+  htm+='</table>';
+  if(!MES_DETALLE_DEPOSITOS){
+    htm+=`<p class="mut" style="margin-top:8px">Haz clic en "Ver" para ver solo los depósitos de ese mes. También filtra la tabla de arriba.</p>`;
+  } else {
+    htm+=`<p style="margin-top:10px"><button class="btn-small" style="background:#fff;border:1px solid #ddd;color:#111;width:auto" onclick="limpiarFiltroDepositos()">← Ver todos los meses</button></p>`;
+  }
+  htm+='</div>';
+  $('depHist').innerHTML=htm;
+}
+
+window.verDepositosDelMes=(ym)=>{
+  MES_DETALLE_DEPOSITOS=ym;
+  FILTRO_MES=ym;
+  FILTRO_TIPO='deposito';
+  $('fMes').value=ym;
+  aplicarFiltros();
+  renderDepositHistory();
+  document.getElementById('depositHistoryCard').scrollIntoView({behavior:'smooth'});
+};
+
+window.limpiarFiltroDepositos=()=>{
+  MES_DETALLE_DEPOSITOS='';
+  FILTRO_MES='';
+  FILTRO_TIPO='todos';
+  $('fMes').value='';
+  aplicarFiltros();
+  renderDepositHistory();
+};
+
+window.filtrarPorMes=(ym)=>{
+  FILTRO_MES=ym; $('fMes').value=ym; FILTRO_TIPO='deposito';
+  MES_DETALLE_DEPOSITOS=ym;
+  aplicarFiltros();
+  renderDepositHistory();
+};
+
+async function render(){try{
+  let a=await api('movimientos?select=*&order=fecha.desc,creado_en.desc');
+  ALL_DATA=a;let g=0,d=0;a.forEach(x=>x.tipo==='deposito'?d+=+x.monto:g+=+x.monto);
+  $('abal').textContent=money(d-g);$('tg').textContent=money(g);$('td').textContent=money(d);
+  aplicarFiltros();
+  renderDepositHistory();
+}catch(e){console.error(e);note('No se pudo conectar.',true)}}
+
+
+
+async function add(tipo,f,m,d){m=+m;if(!f||m<=0)return note('Ingresa fecha y monto válido.',true);try{await api('movimientos',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({tipo,fecha:f,monto:m,descripcion:d})});await render();note('Guardado.');return true}catch(e){note('No se pudo guardar.',true)}}
+$('sd').onclick=async()=>{if(await add('deposito',$('df').value,$('dm').value,$('dd').value))$('dm').value=''};
+
+window.del=async id=>{if(confirm('¿Eliminar este movimiento?')){await api('movimientos?id=eq.'+id,{method:'DELETE'});render()}};
+
+// --- EDICION ---
+window.openEdit = (id)=>{
+  const item = ALL_DATA.find(x=>x.id===id);
+  if(!item) return;
+  editingId = id;
+  $('ef').value = item.fecha;
+  $('et').value = item.tipo;
+  $('em').value = item.monto;
+  $('ed').value = item.descripcion||'';
+  $('editOverlay').classList.add('open');
+}
+function closeEdit(){
+  $('editOverlay').classList.remove('open');
+  editingId=null;
+}
+$('cancelEdit').onclick=closeEdit;
+$('editOverlay').onclick=(e)=>{ if(e.target.id==='editOverlay') closeEdit(); }
+
+$('saveEdit').onclick=async()=>{
+  if(!editingId) return;
+  const f=$('ef').value, t=$('et').value, m=parseFloat($('em').value), d=$('ed').value.trim();
+  if(!f || isNaN(m) || m<=0) return note('Fecha y monto válidos requeridos.',true);
+  try{
+    await api('movimientos?id=eq.'+editingId,{
+      method:'PATCH',
+      headers:{Prefer:'return=minimal'},
+      body:JSON.stringify({fecha:f, tipo:t, monto:m, descripcion:d})
+    });
+    note('Movimiento actualizado.');
+    closeEdit();
+    await render();
+  }catch(e){
+    console.error(e);
+    note('No se pudo actualizar. Revisa políticas RLS de UPDATE en Supabase.',true);
+  }
+};
+
+// --- SELECCION MULTIPLE (como en tu captura) ---
+$('selAll').onclick=()=>{ document.querySelectorAll('.chk').forEach(c=>c.checked=true); }
+$('deselAll').onclick=()=>{ document.querySelectorAll('.chk').forEach(c=>c.checked=false); }
+
+$('fTodos').onclick=()=>{FILTRO_TIPO='todos';FILTRO_MES='';$('fMes').value='';aplicarFiltros();};
+$('fGastos').onclick=()=>{FILTRO_TIPO='gasto';aplicarFiltros();};
+$('fDepositos').onclick=()=>{FILTRO_TIPO='deposito';aplicarFiltros();};
+$('fMes').onchange=(e)=>{FILTRO_MES=e.target.value;aplicarFiltros();};
+
+$('delSel').onclick=async()=>{
+  const ids=[...document.querySelectorAll('.chk:checked')].map(c=>c.dataset.id);
+  if(!ids.length) return note('No hay nada seleccionado.',true);
+  if(!confirm(`¿Eliminar ${ids.length} movimientos seleccionados?`)) return;
+  try{
+    await api('movimientos?id=in.('+ids.join(',')+')',{method:'DELETE'});
+    note(`${ids.length} eliminados.`);
+    render();
+  }catch(e){ note('No se pudo eliminar seleccionados.',true) }
+};
+
+function initReport(){
+ MONTHS.forEach((x,i)=>$('rm').insertAdjacentHTML('beforeend',`<option value="${i+1}">${x}</option>`));
+ let y=new Date().getFullYear();for(let n=y+1;n>=2025;n--)$('ry').insertAdjacentHTML('beforeend',`<option value="${n}">${n}</option>`);
+ $('rm').value=new Date().getMonth()+1;$('ry').value=y;
+}
+async function report(){
+ try{
+  const y=+$('ry').value,m=+$('rm').value,start=`${y}-${String(m).padStart(2,'0')}-01`,next=m===12?`${y+1}-01-01`:`${y}-${String(m+1).padStart(2,'0')}-01`;
+  const before=await api(`movimientos?select=tipo,monto&fecha=lt.${start}`);
+  const rows=await api(`movimientos?select=*&fecha=gte.${start}&fecha=lt.${next}&order=fecha.asc,creado_en.asc`);
+  let initial=0,dep=0,exp=0;before.forEach(x=>initial+=x.tipo==='deposito'?+x.monto:-x.monto);rows.forEach(x=>x.tipo==='deposito'?dep+=+x.monto:exp+=+x.monto);
+  const net=dep-exp,final=initial+net;
+  $('rperiod').textContent=`${MONTHS[m-1]} ${y}`;$('ri').textContent=money(initial);$('re').textContent=money(exp);$('rd').textContent=money(dep);$('rn').textContent=money(net);$('rf').textContent=money(final);
+  $('rtable').innerHTML=rows.length?'<table><tr><th>Fecha</th><th>Descripción</th><th class="m">Gasto</th><th class="m">Depósito</th><th>Recibo</th></tr>'+rows.map(x=>`<tr><td>${x.fecha}</td><td>${x.descripcion||''}</td><td class="m">${x.tipo==='gasto'?money(x.monto):''}</td><td class="m">${x.tipo==='deposito'?money(x.monto):''}</td><td>${x.recibo_url?`<button type="button" class="btn-small" style="background:#111;color:#fff" onclick='verRecibo(${JSON.stringify(x.recibo_url)})'>Ver recibo</button>`:''}</td></tr>`).join('')+`<tr><th colspan="2">Totales</th><th class="m">${money(exp)}</th><th class="m">${money(dep)}</th><th></th></tr></table>`:'<p class="mut">No hay movimientos en este mes.</p>';
+  $('reportCard').classList.remove('hide');$('reportCard').scrollIntoView({behavior:'smooth'});
+ }catch(e){note('No se pudo generar el reporte.',true)}
+}
+$('gr').onclick=report;$('pdf').onclick=()=>window.print();
+try{document.getElementById('df').setAttribute('max', today());}catch(e){}
+initReport();render();setInterval(render,15000);
+</script></body></html>
