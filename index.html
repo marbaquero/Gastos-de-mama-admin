@@ -24,7 +24,9 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 /* Modal */
 #editOverlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
 #editOverlay.open{display:flex}
-#editBox{background:#fff;border-radius:18px;padding:20px;width:100%;max-width:420px}
+#editBox{background:#fff;border-radius:18px;padding:20px;width:100%;max-width:420px;max-height:92vh;overflow-y:auto}
+#eReciboActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+#eReciboActions button{width:auto;margin-top:0}
 @media(max-width:520px){.grid{grid-template-columns:1fr}.bal{font-size:34px}}
 @media print{body{background:#fff}.w{max-width:none}#top,#depositCard,#allCard,#reportControls,#msg,#editOverlay{display:none!important}#reportCard{display:block!important;margin:0;padding:0}button{display:none!important}}
 </style></head>
@@ -93,6 +95,13 @@ Saldo final acumulado: <b id="rf"></b>
 <label>Tipo</label><select id="et"><option value="gasto">Gasto</option><option value="deposito">Depósito</option></select>
 <label>Monto</label><input id="em" type="number" inputmode="decimal" step=".01">
 <label>Descripción</label><input id="ed" type="text">
+<label>Recibo</label>
+<div id="eReciboActions">
+  <button type="button" id="eVerRecibo" class="btn-small" style="background:#111;color:#fff">Ver recibo</button>
+  <button type="button" id="eDelRecibo" class="del btn-small">Eliminar recibo</button>
+</div>
+<input type="file" id="eReciboFile" accept="image/*" capture="environment" style="margin-top:10px;padding:10px;border:1px solid #ccd0d5;background:#fff">
+<button type="button" id="eSubirRecibo" class="btn-small" style="background:#111;color:#fff;margin-top:8px;width:100%">Subir recibo</button>
 <div class="grid" style="margin-top:12px">
 <button id="saveEdit">Guardar cambios</button>
 <button id="cancelEdit" style="background:#e5e7eb;color:#111">Cancelar</button>
@@ -106,6 +115,7 @@ $('df').value=today();
 
 let ALL_DATA = [];
 let editingId = null;
+let editingItem = null;
 
 async function api(p,o={}){let r=await fetch(U+'/rest/v1/'+p,{...o,headers:{...H,...(o.headers||{})}});if(!r.ok)throw Error(await r.text());let t=await r.text();return t?JSON.parse(t):null}
 async function verRecibo(path){
@@ -121,6 +131,27 @@ async function verRecibo(path){
   if(!signed)throw Error('No signed URL');
   window.open(U+'/storage/v1'+signed,'_blank');
  }catch(e){console.error(e);note('No se pudo abrir el recibo.',true)}
+}
+async function uploadRecibo(file, id){
+  const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+  const path=`mov_${id}_${Date.now()}.${ext}`;
+  const r=await fetch(U+'/storage/v1/object/recibos/'+encodeURIComponent(path),{
+    method:'POST',
+    headers:{apikey:K,Authorization:'Bearer '+K,'Content-Type':file.type||'image/jpeg','x-upsert':'true'},
+    body:file
+  });
+  if(!r.ok)throw Error(await r.text());
+  return path;
+}
+async function deleteReciboStorage(path){
+  if(!path)return;
+  try{
+    const r=await fetch(U+'/storage/v1/object/recibos/'+encodeURIComponent(path),{
+      method:'DELETE',
+      headers:{apikey:K,Authorization:'Bearer '+K}
+    });
+    if(!r.ok)console.warn('No se pudo borrar el recibo anterior del storage', await r.text());
+  }catch(e){ console.warn('No se pudo borrar el recibo anterior del storage', e); }
 }
 function note(t,e=false){$('msg').className='msg'+(e?' err':'');$('msg').textContent=t;setTimeout(()=>{$('msg').className='';$('msg').textContent=''},3500)}
 
@@ -246,22 +277,90 @@ $('sd').onclick=async()=>{if(await add('deposito',$('df').value,$('dm').value,$(
 window.del=async id=>{if(confirm('¿Eliminar este movimiento?')){await api('movimientos?id=eq.'+id,{method:'DELETE'});render()}};
 
 // --- EDICION ---
+function updateEditReciboUI(){
+  const has = !!(editingItem && editingItem.recibo_url);
+  $('eVerRecibo').style.display = has ? '' : 'none';
+  $('eDelRecibo').style.display = has ? '' : 'none';
+  $('eSubirRecibo').textContent = has ? 'Reemplazar recibo' : 'Subir recibo';
+  $('eReciboFile').value = '';
+}
 window.openEdit = (id)=>{
   const item = ALL_DATA.find(x=>x.id===id);
   if(!item) return;
   editingId = id;
+  editingItem = item;
   $('ef').value = item.fecha;
   $('et').value = item.tipo;
   $('em').value = item.monto;
   $('ed').value = item.descripcion||'';
+  updateEditReciboUI();
   $('editOverlay').classList.add('open');
 }
 function closeEdit(){
   $('editOverlay').classList.remove('open');
   editingId=null;
+  editingItem=null;
 }
 $('cancelEdit').onclick=closeEdit;
 $('editOverlay').onclick=(e)=>{ if(e.target.id==='editOverlay') closeEdit(); }
+
+$('eVerRecibo').onclick=()=>{ if(editingItem) verRecibo(editingItem.recibo_url); };
+
+$('eDelRecibo').onclick=async()=>{
+  if(!editingItem || !editingItem.recibo_url) return;
+  if(!confirm('¿Eliminar el recibo de este movimiento? Esta acción no se puede deshacer.')) return;
+  const oldPath = editingItem.recibo_url;
+  try{
+    $('eDelRecibo').disabled=true;
+    await api('movimientos?id=eq.'+editingId,{
+      method:'PATCH',
+      headers:{Prefer:'return=minimal'},
+      body:JSON.stringify({recibo_url:null})
+    });
+    await deleteReciboStorage(oldPath);
+    editingItem.recibo_url = null;
+    const dataItem = ALL_DATA.find(x=>x.id===editingId);
+    if(dataItem) dataItem.recibo_url = null;
+    updateEditReciboUI();
+    note('Recibo eliminado.');
+    aplicarFiltros();
+  }catch(e){
+    console.error(e);
+    note('No se pudo eliminar el recibo.',true);
+  }finally{
+    $('eDelRecibo').disabled=false;
+  }
+};
+
+$('eSubirRecibo').onclick=async()=>{
+  const f = $('eReciboFile').files[0];
+  if(!f) return note('Selecciona o toma una foto del recibo primero.',true);
+  if(!editingId) return;
+  const oldPath = editingItem ? editingItem.recibo_url : null;
+  try{
+    $('eSubirRecibo').disabled=true;
+    $('eSubirRecibo').textContent='Subiendo...';
+    const newPath = await uploadRecibo(f, editingId);
+    await api('movimientos?id=eq.'+editingId,{
+      method:'PATCH',
+      headers:{Prefer:'return=minimal'},
+      body:JSON.stringify({recibo_url:newPath})
+    });
+    if(oldPath && oldPath!==newPath) await deleteReciboStorage(oldPath);
+    if(editingItem) editingItem.recibo_url = newPath;
+    const dataItem = ALL_DATA.find(x=>x.id===editingId);
+    if(dataItem) dataItem.recibo_url = newPath;
+    updateEditReciboUI();
+    note('Recibo actualizado.');
+    aplicarFiltros();
+  }catch(e){
+    console.error(e);
+    note('No se pudo subir el recibo.',true);
+  }finally{
+    $('eSubirRecibo').disabled=false;
+    $('eSubirRecibo').textContent = (editingItem && editingItem.recibo_url) ? 'Reemplazar recibo' : 'Subir recibo';
+  }
+};
 
 $('saveEdit').onclick=async()=>{
   if(!editingId) return;
