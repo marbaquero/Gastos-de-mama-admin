@@ -27,6 +27,9 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 #editBox{background:#fff;border-radius:18px;padding:20px;width:100%;max-width:420px;max-height:92vh;overflow-y:auto}
 #eReciboActions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 #eReciboActions button{width:auto;margin-top:0}
+tr.drop-ok td{background:#eef2ff!important;outline:2px dashed #6366f1;outline-offset:-2px}
+.rcp-drag{cursor:grab}
+#eMoverBox{display:none;margin-top:10px;padding:10px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px}
 @media(max-width:520px){.grid{grid-template-columns:1fr}.bal{font-size:34px}}
 @media print{body{background:#fff}.w{max-width:none}#top,#depositCard,#allCard,#reportControls,#msg,#editOverlay{display:none!important}#reportCard{display:block!important;margin:0;padding:0}button{display:none!important}}
 </style></head>
@@ -99,6 +102,12 @@ Saldo final acumulado: <b id="rf"></b>
 <div id="eReciboActions">
   <button type="button" id="eVerRecibo" class="btn-small" style="background:#111;color:#fff">Ver recibo</button>
   <button type="button" id="eDelRecibo" class="del btn-small">Eliminar recibo</button>
+  <button type="button" id="eMoverRecibo" class="btn-small" style="background:#eef2ff;color:#3730a3">Mover a otro movimiento</button>
+</div>
+<div id="eMoverBox">
+  <div class="mut" style="margin-bottom:6px">Elija el movimiento que debe quedarse con este recibo:</div>
+  <select id="eMoverSel"></select>
+  <button type="button" id="eMoverOk" class="btn-small" style="background:#111;color:#fff;margin-top:8px;width:100%">Mover recibo</button>
 </div>
 <input type="file" id="eReciboFile" accept="image/*" style="margin-top:10px;padding:10px;border:1px solid #ccd0d5;background:#fff">
 <button type="button" id="eSubirRecibo" class="btn-small" style="background:#111;color:#fff;margin-top:8px;width:100%">Subir recibo</button>
@@ -164,12 +173,12 @@ let MES_DETALLE_DEPOSITOS='';
 function tab(a){
  if(!a.length)return '<span class="mut">Sin movimientos en este filtro.</span>';
  return '<table><tr><th></th><th>Fecha</th><th>Descripción</th><th class="m">Monto</th><th>Recibo</th><th></th></tr>'+
- a.map(x=>`<tr>
+ a.map(x=>`<tr data-id="${x.id}">
  <td><input type="checkbox" class="chk" data-id="${x.id}"></td>
  <td>${x.fecha}</td>
  <td>${x.descripcion||''}</td>
  <td class="m ${x.tipo==='deposito'?'dep':'gas'}">${x.tipo==='deposito'?'+':'-'}${money(x.monto)}</td>
- <td>${x.recibo_url?`<button type="button" class="btn-small" style="background:#111;color:#fff" onclick='verRecibo(${JSON.stringify(x.recibo_url)})'>Ver recibo</button>`:''}</td>
+ <td>${x.recibo_url?`<button type="button" class="btn-small rcp-drag" draggable="true" data-src="${x.id}" title="Arrastre este botón sobre otro movimiento para mover el recibo" style="background:#111;color:#fff" onclick='verRecibo(${JSON.stringify(x.recibo_url)})'>Ver recibo</button>`:''}</td>
  <td><div class="row-actions">
    <button class="btn-edit" onclick="openEdit(${x.id})">✎</button>
    <button class="del" onclick="del(${x.id})">×</button>
@@ -276,11 +285,57 @@ $('sd').onclick=async()=>{if(await add('deposito',$('df').value,$('dm').value,$(
 
 window.del=async id=>{if(confirm('¿Eliminar este movimiento?')){await api('movimientos?id=eq.'+id,{method:'DELETE'});render()}};
 
+// --- MOVER RECIBO ---
+// El archivo del recibo no se copia ni se borra: solo se cambia a qué movimiento apunta (recibo_url).
+// Si el destino ya tiene un recibo, se intercambian.
+async function moverRecibo(srcId, dstId){
+  const src = ALL_DATA.find(x=>x.id===srcId), dst = ALL_DATA.find(x=>x.id===dstId);
+  if(!src || !dst || src.id===dst.id || !src.recibo_url) return false;
+  const swap = !!dst.recibo_url;
+  const msg = swap
+    ? `El movimiento "${dst.descripcion||dst.fecha}" ya tiene un recibo. ¿Intercambiar los recibos entre los dos movimientos?`
+    : `¿Mover el recibo de "${src.descripcion||src.fecha}" (${money(src.monto)}) a "${dst.descripcion||dst.fecha}" (${money(dst.monto)})?`;
+  if(!confirm(msg)) return false;
+  const srcPath = src.recibo_url, dstPath = dst.recibo_url || null;
+  try{
+    await api('movimientos?id=eq.'+dst.id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({recibo_url:srcPath})});
+    await api('movimientos?id=eq.'+src.id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({recibo_url:dstPath})});
+    src.recibo_url = dstPath; dst.recibo_url = srcPath;
+    note(swap ? 'Recibos intercambiados.' : 'Recibo movido.');
+    return true;
+  }catch(e){ console.error(e); note('No se pudo mover el recibo.',true); await render(); return false; }
+}
+// Arrastrar y soltar (computadora): arrastre "Ver recibo" y suéltelo sobre otra fila.
+(function(){
+  const box = $('all'); let dragId = null;
+  box.addEventListener('dragstart',e=>{
+    const b = e.target.closest && e.target.closest('[data-src]');
+    if(!b) return; dragId = +b.dataset.src;
+    e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', String(dragId));
+  });
+  box.addEventListener('dragover',e=>{
+    if(dragId===null) return;
+    const tr = e.target.closest && e.target.closest('tr[data-id]');
+    box.querySelectorAll('tr.drop-ok').forEach(r=>{ if(r!==tr) r.classList.remove('drop-ok'); });
+    if(tr && +tr.dataset.id!==dragId){ e.preventDefault(); tr.classList.add('drop-ok'); }
+  });
+  box.addEventListener('drop',async e=>{
+    const tr = e.target.closest && e.target.closest('tr[data-id]');
+    box.querySelectorAll('tr.drop-ok').forEach(r=>r.classList.remove('drop-ok'));
+    if(!tr || dragId===null) return; e.preventDefault();
+    const from = dragId; dragId = null;
+    if(await moverRecibo(from, +tr.dataset.id)) await render();
+  });
+  box.addEventListener('dragend',()=>{ dragId=null; box.querySelectorAll('tr.drop-ok').forEach(r=>r.classList.remove('drop-ok')); });
+})();
+
 // --- EDICION ---
 function updateEditReciboUI(){
   const has = !!(editingItem && editingItem.recibo_url);
   $('eVerRecibo').style.display = has ? '' : 'none';
   $('eDelRecibo').style.display = has ? '' : 'none';
+  $('eMoverRecibo').style.display = has ? '' : 'none';
+  $('eMoverBox').style.display = 'none';
   $('eSubirRecibo').textContent = has ? 'Reemplazar recibo' : 'Subir recibo';
   $('eReciboFile').value = '';
 }
@@ -304,6 +359,19 @@ function closeEdit(){
 $('cancelEdit').onclick=closeEdit;
 $('editOverlay').onclick=(e)=>{ if(e.target.id==='editOverlay') closeEdit(); }
 
+$('eMoverRecibo').onclick=()=>{
+  if(!editingItem || !editingItem.recibo_url) return;
+  const opts = ALL_DATA.filter(x=>x.id!==editingItem.id && x.tipo==='gasto')
+    .map(x=>`<option value="${x.id}">${x.fecha} · ${(x.descripcion||'').replace(/</g,'&lt;')} · ${money(x.monto)}${x.recibo_url?' (ya tiene recibo)':''}</option>`).join('');
+  $('eMoverSel').innerHTML = opts || '<option value="">No hay otros gastos</option>';
+  $('eMoverBox').style.display = 'block';
+};
+$('eMoverOk').onclick=async()=>{
+  const dst = +$('eMoverSel').value;
+  if(!editingItem || !dst) return;
+  const src = editingItem.id;
+  if(await moverRecibo(src, dst)){ closeEdit(); await render(); }
+};
 $('eVerRecibo').onclick=()=>{ if(editingItem) verRecibo(editingItem.recibo_url); };
 
 $('eDelRecibo').onclick=async()=>{
