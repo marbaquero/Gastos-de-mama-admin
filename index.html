@@ -176,7 +176,7 @@ function tab(a){
  a.map(x=>`<tr data-id="${x.id}">
  <td><input type="checkbox" class="chk" data-id="${x.id}"></td>
  <td>${x.fecha}</td>
- <td>${x.descripcion||''}</td>
+ <td>${x.descripcion||''}${x.registrado_por?` <span class="mut">· ${String(x.registrado_por).replace(/</g,'&lt;')}</span>`:''}</td>
  <td class="m ${x.tipo==='deposito'?'dep':'gas'}">${x.tipo==='deposito'?'+':'-'}${money(x.monto)}</td>
  <td>${x.recibo_url?`<button type="button" class="btn-small rcp-drag" draggable="true" data-src="${x.id}" title="Arrastre este botón sobre otro movimiento para mover el recibo" style="background:#111;color:#fff" onclick='verRecibo(${JSON.stringify(x.recibo_url)})'>Ver recibo</button>`:''}</td>
  <td><div class="row-actions">
