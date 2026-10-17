@@ -78,6 +78,8 @@ Saldo final acumulado: <b id="rf"></b>
 <button id="fDepositos" class="btn-small" style="background:#fff;border:1px solid #ddd;color:#111">Solo depósitos</button>
 <select id="fMes" class="btn-small" style="width:auto;padding:10px;border:1px solid #ddd;background:#fff"><option value="">Todos los meses</option></select>
 </div>
+<div class="toolbar" id="quienBar" style="align-items:center"><span class="mut">Por persona:</span></div>
+<div id="quienTotal" class="hide" style="margin:6px 0 10px;padding:12px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px"></div>
 <div class="toolbar">
 <button id="selAll" class="btn-small" style="background:#111;color:#fff">Seleccionar todo</button>
 <button id="deselAll" class="btn-small" style="background:#111;color:#fff">Deseleccionar</button>
@@ -171,6 +173,9 @@ function note(t,e=false){$('msg').className='msg'+(e?' err':'');$('msg').textCon
 
 let FILTRO_TIPO='todos';
 let FILTRO_MES='';
+let FILTRO_QUIEN='';
+const PERSONAS=['Aracely','Genesis','Ibeth'];
+const normQ=s=>String(s||'').trim().toLowerCase();
 let MES_DETALLE_DEPOSITOS='';
 
 function tab(a){
@@ -179,7 +184,7 @@ function tab(a){
  a.map(x=>`<tr data-id="${x.id}">
  <td><input type="checkbox" class="chk" data-id="${x.id}"></td>
  <td>${x.fecha}</td>
- <td>${x.descripcion||''}${x.registrado_por?` <span class="mut">· ${String(x.registrado_por).replace(/</g,'&lt;')}</span>`:''}</td>
+ <td>${x.descripcion||''}${x.registrado_por?` <a href="#" class="quien-link mut" data-q="${String(x.registrado_por).replace(/"/g,'&quot;').replace(/</g,'&lt;')}" style="text-decoration:underline">· ${String(x.registrado_por).replace(/</g,'&lt;')}</a>`:''}</td>
  <td class="m ${x.tipo==='deposito'?'dep':'gas'}">${x.tipo==='deposito'?'+':'-'}${money(x.monto)}</td>
  <td>${x.recibo_url?`<button type="button" class="btn-small rcp-drag" draggable="true" data-src="${x.id}" title="Arrastre este botón sobre otro movimiento para mover el recibo" style="background:#111;color:#fff" onclick='verRecibo(${JSON.stringify(x.recibo_url)})'>Ver recibo</button>`:''}</td>
  <td><div class="row-actions">
@@ -189,11 +194,36 @@ function tab(a){
  </tr>`).join('')+'</table>';
 }
 
+function renderQuien(f){
+  const bar=$('quienBar'); if(!bar) return;
+  const nombres=[...PERSONAS];
+  ALL_DATA.forEach(x=>{ const n=String(x.registrado_por||'').trim(); if(n && !nombres.some(p=>normQ(p)===normQ(n))) nombres.push(n); });
+  bar.innerHTML='<span class="mut">Por persona:</span>'+nombres.map(n=>{
+    const on=normQ(n)===normQ(FILTRO_QUIEN);
+    return `<button type="button" class="btn-small quien-chip" data-q="${n.replace(/"/g,'&quot;')}" style="${on?'background:#111;color:#fff':'background:#fff;border:1px solid #ddd;color:#111'}">${n.replace(/</g,'&lt;')}</button>`;
+  }).join('');
+  const box=$('quienTotal');
+  if(!FILTRO_QUIEN){ box.className='hide'; box.innerHTML=''; return; }
+  const gastos=f.filter(x=>x.tipo==='gasto');
+  const tot=gastos.reduce((s,x)=>s+(+x.monto||0),0);
+  const mesTxt=FILTRO_MES?` en ${FILTRO_MES}`:' (todos los meses)';
+  box.className='';
+  box.innerHTML=`<b>${FILTRO_QUIEN.replace(/</g,'&lt;')}</b>${mesTxt}<br><span style="font-size:26px;font-weight:800">${money(tot)}</span> <span class="mut">en ${gastos.length} gasto${gastos.length===1?'':'s'}</span>`;
+}
+function setQuien(n){ FILTRO_QUIEN = (normQ(FILTRO_QUIEN)===normQ(n)) ? '' : n; aplicarFiltros(); }
+document.addEventListener('click',(e)=>{
+  const c=e.target.closest('.quien-chip,.quien-link');
+  if(!c) return;
+  e.preventDefault();
+  setQuien(c.getAttribute('data-q'));
+});
 function aplicarFiltros(){
   let f=[...ALL_DATA];
   if(FILTRO_TIPO!=='todos') f=f.filter(x=>x.tipo===FILTRO_TIPO);
   if(FILTRO_MES) f=f.filter(x=>x.fecha.startsWith(FILTRO_MES));
+  if(FILTRO_QUIEN) f=f.filter(x=>normQ(x.registrado_por)===normQ(FILTRO_QUIEN));
   $('all').innerHTML=tab(f);
+  renderQuien(f);
 }
 
 function renderDepositHistory(){
@@ -456,7 +486,7 @@ $('saveEdit').onclick=async()=>{
 $('selAll').onclick=()=>{ document.querySelectorAll('.chk').forEach(c=>c.checked=true); }
 $('deselAll').onclick=()=>{ document.querySelectorAll('.chk').forEach(c=>c.checked=false); }
 
-$('fTodos').onclick=()=>{FILTRO_TIPO='todos';FILTRO_MES='';$('fMes').value='';aplicarFiltros();};
+$('fTodos').onclick=()=>{FILTRO_TIPO='todos';FILTRO_MES='';FILTRO_QUIEN='';$('fMes').value='';aplicarFiltros();};
 $('fGastos').onclick=()=>{FILTRO_TIPO='gasto';aplicarFiltros();};
 $('fDepositos').onclick=()=>{FILTRO_TIPO='deposito';aplicarFiltros();};
 $('fMes').onchange=(e)=>{FILTRO_MES=e.target.value;aplicarFiltros();};
