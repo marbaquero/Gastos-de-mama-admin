@@ -23,6 +23,9 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 .summary{line-height:1.75}.rt{text-align:center;margin-bottom:2px}.rp{text-align:center;color:#68707d;margin-top:0}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .top-row{display:flex;justify-content:space-between;align-items:flex-start;}
+.bulk-btn{background:#111;color:#fff;width:auto;padding:10px 16px;margin-right:8px}
+.bulk-del{background:#fee2e2;color:#991b1b;width:auto;padding:10px 16px;margin-top:10px;margin-bottom:10px}
+.btn-recibo{background:#111;color:#fff;padding:4px 8px;font-size:12px;border-radius:6px;margin-left:8px;width:auto}
 </style>
 </head>
 <body>
@@ -31,6 +34,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 </div>
 <div id="app" class="w hide">
   <h1>Gastos de Mamá — Administrador</h1>
+  
   <div class="c">
     <div class="top-row">
       <div>
@@ -64,16 +68,39 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
   <div class="c">
     <h2>Todos los movimientos</h2>
     <div class="toolbar">
-      <button class="btn-small" style="background:#111" data-filter="todos">Todos</button>
+      <button class="btn-small" style="background:#111;color:#fff" data-filter="todos">Todos</button>
       <button class="btn-small" style="background:#eee;color:#000" data-filter="gasto">Solo gastos</button>
       <button class="btn-small" style="background:#eee;color:#000" data-filter="deposito">Solo depósitos</button>
     </div>
+    
+    <select id="f-month" style="margin-bottom:12px; max-width:200px;">
+      <option value="">Todos los meses</option>
+    </select>
+
     <div class="mut" style="margin-bottom:10px">Por persona: 
       <button class="btn-small" data-person="Aracely">Aracely</button>
       <button class="btn-small" data-person="Genesis">Genesis</button>
       <button class="btn-small" data-person="Ibeth">Ibeth</button>
     </div>
-    <table id="t-movs"><tbody></tbody></table>
+
+    <div>
+      <button class="bulk-btn" id="btn-sel-all">Seleccionar todo</button>
+      <button class="bulk-btn" id="btn-deselect">Deseleccionar</button>
+    </div>
+    <button class="bulk-del" id="btn-del-sel">Eliminar seleccionados</button>
+
+    <table id="t-movs">
+      <thead>
+        <tr>
+          <th style="width:40px"></th>
+          <th>Fecha</th>
+          <th>Descripción</th>
+          <th class="m">Monto</th>
+          <th>Recibo</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
 </div>
 
@@ -85,6 +112,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let householdId = null;
 let currentFilter = 'todos';
 let currentPerson = null;
+let currentMonth = '';
 let currentBalance = 0;
 
 async function init() {
@@ -93,7 +121,6 @@ async function init() {
   if (!session) { location.href = '/portal.html'; return; }
 
   const { data: member } = await sb.from('household_members').select('household_id, role').eq('user_id', session.user.id).maybeSingle();
-  
   if (!member) {
     document.getElementById('auth-gate').innerHTML = '<h2>Error: Tu cuenta no está vinculada a una familia.</h2><a href="/portal.html">Volver al portal</a>';
     return;
@@ -111,8 +138,12 @@ async function init() {
   
   const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const mesSel = document.getElementById('r-mes'); const anioSel = document.getElementById('r-anio');
+  const monthFilter = document.getElementById('f-month');
   const hoy = new Date();
-  meses.forEach((m,i)=>{ let o=document.createElement('option'); o.value=i; o.text=m; if(i===hoy.getMonth())o.selected=true; mesSel.appendChild(o); });
+  meses.forEach((m,i)=>{ 
+    let o=document.createElement('option'); o.value=i; o.text=m; if(i===hoy.getMonth())o.selected=true; mesSel.appendChild(o); 
+    let o2=document.createElement('option'); o2.value=i+1; o2.text=m; monthFilter.appendChild(o2);
+  });
   for(let a=hoy.getFullYear()-2; a<=hoy.getFullYear()+1; a++){ let o=document.createElement('option'); o.value=a; o.text=a; if(a===hoy.getFullYear())o.selected=true; anioSel.appendChild(o); }
 
   loadData();
@@ -128,27 +159,73 @@ async function loadData() {
   document.getElementById('tot-gastos').textContent = `$${gastos.toFixed(2)}`;
   document.getElementById('tot-depositos').textContent = `$${depositos.toFixed(2)}`;
 
-  let q = sb.from('expense_movements').select('*').eq('household_id', householdId).order('created_at', {ascending:false}).limit(50);
+  let q = sb.from('expense_movements').select('*').eq('household_id', householdId).order('created_at', {ascending:false}).limit(100);
   if (currentFilter !== 'todos') q = q.eq('type', currentFilter);
   if (currentPerson) q = q.eq('registered_by', currentPerson);
+  
+  if (currentMonth) {
+    const year = new Date().getFullYear();
+    const start = `${year}-${currentMonth.toString().padStart(2,'0')}-01`;
+    const end = new Date(year, currentMonth, 0).toISOString().split('T')[0];
+    q = q.gte('movement_date', start).lte('movement_date', end);
+  }
   
   const { data: movs } = await q;
   const tbody = document.querySelector('#t-movs tbody');
   tbody.innerHTML = '';
-  if(!movs || movs.length===0){ tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:#666">No hay movimientos</td></tr>'; return; }
+  if(!movs || movs.length===0){ tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#666">No hay movimientos</td></tr>'; return; }
   
   movs.forEach(m => {
     const isG = m.type === 'gasto';
+    const recibo = m.receipt_path ? `<button class="btn-recibo" onclick="verRecibo('${m.receipt_path}')">Ver recibo</button>` : '';
     tbody.innerHTML += `
       <tr>
+        <td><input type="checkbox" class="row-check" data-id="${m.id}"></td>
         <td>${new Date(m.movement_date).toLocaleDateString()}</td>
-        <td><b class="${isG?'gas':'dep'}">${isG?'-':'+'}$${Number(m.amount).toFixed(2)}</b><br><span class="mut" style="font-size:12px">${m.description||''}</span></td>
-        <td>${m.registered_by||''}</td>
-        <td style="text-align:right"><button class="del" onclick="deleteMov(${m.id})">X</button></td>
+        <td><span class="mut" style="font-size:12px">${m.description||''}</span>${m.registered_by ? ` <span style="color:#3b82f6; text-decoration:underline; cursor:pointer" onclick="document.querySelector('[data-person=\\'${m.registered_by}\\']').click()">${m.registered_by}</span>` : ''}</td>
+        <td class="m"><b class="${isG?'gas':'dep'}">${isG?'-':'+'}$${Number(m.amount).toFixed(2)}</b> ${recibo}</td>
+        <td style="text-align:right">
+          <button class="btn-edit" onclick="editMov(${m.id}, ${m.amount}, '${(m.description||'').replace(/'/g, "\\'")}')">✎</button>
+          <button class="del" onclick="deleteMov(${m.id})">X</button>
+        </td>
       </tr>
     `;
   });
 }
+
+window.verRecibo = async (path) => {
+  const { data, error } = await sb.storage.from('recibos').createSignedUrl(path, 60);
+  if(error) return alert("Error: " + error.message);
+  window.open(data.signedUrl, '_blank');
+};
+
+window.editMov = async (id, oldAmount, oldDesc) => {
+  const nuevoMonto = prompt("Editar monto:", oldAmount);
+  if (nuevoMonto === null) return;
+  const nuevaDesc = prompt("Editar descripción:", oldDesc);
+  if (nuevaDesc === null) return;
+  
+  const { error } = await sb.from('expense_movements').update({ amount: parseFloat(nuevoMonto), description: nuevaDesc }).eq('id', id).eq('household_id', householdId);
+  if(!error) loadData();
+};
+
+window.deleteMov = async (id) => {
+  if(!confirm("¿Borrar movimiento?")) return;
+  const { error } = await sb.from('expense_movements').delete().eq('id', id).eq('household_id', householdId);
+  if(!error) loadData();
+};
+
+document.getElementById('btn-sel-all').onclick = () => document.querySelectorAll('.row-check').forEach(c => c.checked = true);
+document.getElementById('btn-deselect').onclick = () => document.querySelectorAll('.row-check').forEach(c => c.checked = false);
+document.getElementById('btn-del-sel').onclick = async () => {
+  const checks = [...document.querySelectorAll('.row-check')].filter(c => c.checked).map(c => c.dataset.id);
+  if(checks.length === 0) return alert("Selecciona al menos un movimiento");
+  if(!confirm(`¿Borrar ${checks.length} movimientos?`)) return;
+  const { error } = await sb.from('expense_movements').delete().in('id', checks).eq('household_id', householdId);
+  if(!error) loadData();
+};
+
+document.getElementById('f-month').onchange = (e) => { currentMonth = e.target.value; loadData(); };
 
 document.getElementById('btn-add').onclick = async () => {
   const monto = parseFloat(document.getElementById('f-monto').value);
@@ -193,21 +270,21 @@ document.getElementById('btn-edit-bal').onclick = async () => {
   else loadData();
 };
 
-window.deleteMov = async (id) => {
-  if(!confirm("¿Borrar movimiento?")) return;
-  const { error } = await sb.from('expense_movements').delete().eq('id', id).eq('household_id', householdId);
-  if(!error) loadData();
-};
-
 document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => {
-  document.querySelectorAll('[data-filter]').forEach(x=>x.style.background='#eee');
+  document.querySelectorAll('[data-filter]').forEach(x=>{x.style.background='#eee'; x.style.color='#000';});
   b.style.background='#111'; b.style.color='#fff';
   currentFilter = b.dataset.filter;
   loadData();
 });
 
 document.querySelectorAll('[data-person]').forEach(b => b.onclick = () => {
-  currentPerson = currentPerson === b.dataset.person ? null : b.dataset.person;
+  document.querySelectorAll('[data-person]').forEach(x=>{x.style.background='#eee'; x.style.color='#000';});
+  if (currentPerson === b.dataset.person) {
+    currentPerson = null; // toggle off
+  } else {
+    currentPerson = b.dataset.person;
+    b.style.background='#111'; b.style.color='#fff';
+  }
   loadData();
 });
 
