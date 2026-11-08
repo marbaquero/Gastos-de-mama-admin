@@ -20,12 +20,20 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 .btn-edit{background:#eef2ff;color:#3730a3;padding:6px 10px;margin:0;width:auto;border-radius:8px}
 .btn-small{padding:7px 9px;margin:0;width:auto;font-size:13px}
 .msg{padding:10px;border-radius:10px;background:#ecfdf3;color:#067647;margin:10px 0}.err{background:#fef3f2;color:#b42318}
-.summary{line-height:1.75}.rt{text-align:center;margin-bottom:2px}.rp{text-align:center;color:#68707d;margin-top:0}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .top-row{display:flex;justify-content:space-between;align-items:flex-start;}
 .bulk-btn{background:#111;color:#fff;width:auto;padding:10px 16px;margin-right:8px}
 .bulk-del{background:#fee2e2;color:#991b1b;width:auto;padding:10px 16px;margin-top:10px;margin-bottom:10px}
 .btn-recibo{background:#111;color:#fff;padding:4px 8px;font-size:12px;border-radius:6px;margin-left:8px;width:auto}
+
+/* Modal Styles */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
+.modal-overlay.active { display: flex; }
+.modal-content { background: #fff; border-radius: 16px; padding: 24px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
+.modal-content h2 { margin-top: 0; }
+.modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+.modal-actions button { flex: 1; }
+.modal-actions .cancel { background: #e5e7eb; color: #111; }
 </style>
 </head>
 <body>
@@ -54,15 +62,6 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
     <label>Descripción</label><input type="text" id="f-desc" value="Depósito">
     <button id="btn-add">Agregar depósito</button>
     <div id="msg-add" class="msg hide"></div>
-  </div>
-
-  <div class="c">
-    <h2>Reporte mensual</h2>
-    <div class="grid">
-      <div><label>Mes</label><select id="r-mes"></select></div>
-      <div><label>Año</label><select id="r-anio"></select></div>
-    </div>
-    <button id="btn-report">Generar reporte</button>
   </div>
 
   <div class="c">
@@ -104,6 +103,40 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
   </div>
 </div>
 
+<!-- Edit Modal -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-content">
+    <h2>Editar Movimiento</h2>
+    <input type="hidden" id="e-id">
+    
+    <label>Fecha</label>
+    <input type="date" id="e-fecha">
+    
+    <label>Monto</label>
+    <input type="number" step="0.01" id="e-monto">
+    
+    <label>Descripción</label>
+    <input type="text" id="e-desc">
+    
+    <label>Registrado por</label>
+    <select id="e-person">
+      <option value="Admin">Admin</option>
+      <option value="Aracely">Aracely</option>
+      <option value="Genesis">Genesis</option>
+      <option value="Ibeth">Ibeth</option>
+    </select>
+
+    <label>Recibo</label>
+    <div id="e-recibo-wrap"></div>
+    <input type="file" id="e-file" accept="image/*" style="margin-top:8px; border:none; padding:0;">
+
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeEdit()">Cancelar</button>
+      <button onclick="saveEdit()">Guardar Cambios</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const SUPABASE_URL = 'https://fftnffmttuzfftntzzhu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmdG5mZm10dHV6ZmZ0bnR6emh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MTgxNzAsImV4cCI6MjEwOTQ5NDE3MH0.lmYfQeXAq6oPZ-UMj8AQXQq2snU78FatLMbwRftaMyM';
@@ -114,6 +147,7 @@ let currentFilter = 'todos';
 let currentPerson = null;
 let currentMonth = '';
 let currentBalance = 0;
+let currentReceipt = null;
 
 async function init() {
   document.getElementById('auth-gate').style.display = 'block';
@@ -137,14 +171,11 @@ async function init() {
   document.getElementById('f-fecha').valueAsDate = new Date();
   
   const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-  const mesSel = document.getElementById('r-mes'); const anioSel = document.getElementById('r-anio');
   const monthFilter = document.getElementById('f-month');
   const hoy = new Date();
   meses.forEach((m,i)=>{ 
-    let o=document.createElement('option'); o.value=i; o.text=m; if(i===hoy.getMonth())o.selected=true; mesSel.appendChild(o); 
     let o2=document.createElement('option'); o2.value=i+1; o2.text=m; monthFilter.appendChild(o2);
   });
-  for(let a=hoy.getFullYear()-2; a<=hoy.getFullYear()+1; a++){ let o=document.createElement('option'); o.value=a; o.text=a; if(a===hoy.getFullYear())o.selected=true; anioSel.appendChild(o); }
 
   loadData();
 }
@@ -185,7 +216,7 @@ async function loadData() {
         <td><span class="mut" style="font-size:12px">${m.description||''}</span>${m.registered_by ? ` <span style="color:#3b82f6; text-decoration:underline; cursor:pointer" onclick="document.querySelector('[data-person=\\'${m.registered_by}\\']').click()">${m.registered_by}</span>` : ''}</td>
         <td class="m"><b class="${isG?'gas':'dep'}">${isG?'-':'+'}$${Number(m.amount).toFixed(2)}</b> ${recibo}</td>
         <td style="text-align:right">
-          <button class="btn-edit" onclick="editMov(${m.id}, ${m.amount}, '${(m.description||'').replace(/'/g, "\\'")}')">✎</button>
+          <button class="btn-edit" onclick='openEdit(${JSON.stringify(m)})'>✎</button>
           <button class="del" onclick="deleteMov(${m.id})">X</button>
         </td>
       </tr>
@@ -199,14 +230,58 @@ window.verRecibo = async (path) => {
   window.open(data.signedUrl, '_blank');
 };
 
-window.editMov = async (id, oldAmount, oldDesc) => {
-  const nuevoMonto = prompt("Editar monto:", oldAmount);
-  if (nuevoMonto === null) return;
-  const nuevaDesc = prompt("Editar descripción:", oldDesc);
-  if (nuevaDesc === null) return;
+window.openEdit = (m) => {
+  document.getElementById('e-id').value = m.id;
+  document.getElementById('e-fecha').value = m.movement_date;
+  document.getElementById('e-monto').value = m.amount;
+  document.getElementById('e-desc').value = m.description || '';
+  document.getElementById('e-person').value = m.registered_by || 'Admin';
   
-  const { error } = await sb.from('expense_movements').update({ amount: parseFloat(nuevoMonto), description: nuevaDesc }).eq('id', id).eq('household_id', householdId);
-  if(!error) loadData();
+  currentReceipt = m.receipt_path;
+  const wrap = document.getElementById('e-recibo-wrap');
+  if(currentReceipt) {
+    wrap.innerHTML = `<span style="color:#067647; font-size:14px">✓ Recibo actual guardado</span> <button type="button" class="btn-small" onclick="verRecibo('${currentReceipt}')">Ver</button>`;
+  } else {
+    wrap.innerHTML = `<span style="color:#68707d; font-size:14px">Sin recibo</span>`;
+  }
+  
+  document.getElementById('e-file').value = '';
+  document.getElementById('edit-modal').classList.add('active');
+};
+
+window.closeEdit = () => {
+  document.getElementById('edit-modal').classList.remove('active');
+};
+
+window.saveEdit = async () => {
+  const id = document.getElementById('e-id').value;
+  const fecha = document.getElementById('e-fecha').value;
+  const monto = parseFloat(document.getElementById('e-monto').value);
+  const desc = document.getElementById('e-desc').value;
+  const person = document.getElementById('e-person').value;
+  const file = document.getElementById('e-file').files[0];
+  
+  if(!monto || monto <= 0) return alert("Monto inválido");
+  
+  let newReceiptPath = currentReceipt;
+  
+  if (file) {
+    const ext = file.name.split('.').pop();
+    newReceiptPath = `${householdId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
+    const { error: upErr } = await sb.storage.from('recibos').upload(newReceiptPath, file);
+    if(upErr) return alert("Error subiendo recibo: " + upErr.message);
+  }
+
+  const { error } = await sb.from('expense_movements').update({
+    movement_date: fecha,
+    amount: monto,
+    description: desc,
+    registered_by: person,
+    receipt_path: newReceiptPath
+  }).eq('id', id).eq('household_id', householdId);
+
+  if(error) alert(error.message);
+  else { closeEdit(); loadData(); }
 };
 
 window.deleteMov = async (id) => {
@@ -280,7 +355,7 @@ document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => {
 document.querySelectorAll('[data-person]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-person]').forEach(x=>{x.style.background='#eee'; x.style.color='#000';});
   if (currentPerson === b.dataset.person) {
-    currentPerson = null; // toggle off
+    currentPerson = null; 
   } else {
     currentPerson = b.dataset.person;
     b.style.background='#111'; b.style.color='#fff';
