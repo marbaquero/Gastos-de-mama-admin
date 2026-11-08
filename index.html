@@ -22,6 +22,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 .msg{padding:10px;border-radius:10px;background:#ecfdf3;color:#067647;margin:10px 0}.err{background:#fef3f2;color:#b42318}
 .summary{line-height:1.75}.rt{text-align:center;margin-bottom:2px}.rp{text-align:center;color:#68707d;margin-top:0}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.top-row{display:flex;justify-content:space-between;align-items:flex-start;}
 </style>
 </head>
 <body>
@@ -31,10 +32,15 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 <div id="app" class="w hide">
   <h1>Gastos de Mamá — Administrador</h1>
   <div class="c">
-    <div class="mut">Saldo disponible</div>
-    <div class="bal" id="saldo">$0.00</div>
-    <div class="mut">Total gastos: <span id="tot-gastos">$0.00</span></div>
-    <div class="mut">Total depósitos: <span id="tot-depositos">$0.00</span></div>
+    <div class="top-row">
+      <div>
+        <div class="mut">Saldo disponible</div>
+        <div class="bal" id="saldo">$0.00</div>
+        <div class="mut">Total gastos: <span id="tot-gastos">$0.00</span></div>
+        <div class="mut">Total depósitos: <span id="tot-depositos">$0.00</span></div>
+      </div>
+      <button class="btn-edit" id="btn-edit-bal">✎ Editar</button>
+    </div>
   </div>
 
   <div class="c">
@@ -79,6 +85,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let householdId = null;
 let currentFilter = 'todos';
 let currentPerson = null;
+let currentBalance = 0;
 
 async function init() {
   document.getElementById('auth-gate').style.display = 'block';
@@ -115,7 +122,9 @@ async function loadData() {
   const { data: sumData } = await sb.from('expense_movements').select('amount, type').eq('household_id', householdId);
   let gastos=0, depositos=0;
   if (sumData) sumData.forEach(r => { if(r.type==='gasto') gastos+=Number(r.amount); if(r.type==='deposito') depositos+=Number(r.amount); });
-  document.getElementById('saldo').textContent = `$${(depositos-gastos).toFixed(2)}`;
+  
+  currentBalance = depositos - gastos;
+  document.getElementById('saldo').textContent = `$${currentBalance.toFixed(2)}`;
   document.getElementById('tot-gastos').textContent = `$${gastos.toFixed(2)}`;
   document.getElementById('tot-depositos').textContent = `$${depositos.toFixed(2)}`;
 
@@ -157,6 +166,31 @@ document.getElementById('btn-add').onclick = async () => {
   if(error) { document.getElementById('msg-add').textContent = error.message; document.getElementById('msg-add').className='msg err'; }
   else { document.getElementById('f-monto').value=''; document.getElementById('msg-add').textContent='Depósito guardado.'; document.getElementById('msg-add').className='msg'; loadData(); }
   document.getElementById('msg-add').classList.remove('hide');
+};
+
+document.getElementById('btn-edit-bal').onclick = async () => {
+  const nuevo = prompt("Ingresa el nuevo saldo disponible (ejemplo: 50.14).", currentBalance.toFixed(2));
+  if (nuevo === null) return;
+  const target = parseFloat(nuevo);
+  if (isNaN(target)) return alert("Monto inválido");
+  
+  const diff = target - currentBalance;
+  if (diff === 0) return;
+
+  const type = diff > 0 ? 'deposito' : 'gasto';
+  const amount = Math.abs(diff);
+
+  const { error } = await sb.from('expense_movements').insert({
+    household_id: householdId,
+    movement_date: new Date().toISOString().split('T')[0],
+    type: type,
+    amount: amount,
+    description: 'Ajuste manual de saldo',
+    registered_by: 'Admin'
+  });
+
+  if(error) alert(error.message);
+  else loadData();
 };
 
 window.deleteMov = async (id) => {
