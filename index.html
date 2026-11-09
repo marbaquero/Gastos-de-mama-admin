@@ -104,7 +104,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 
 <script>
 const SUPABASE_URL = 'https://fftnffmttuzfftntzzhu.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmdG5mZm10dHV6ZmZ0bnR6emh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MTgxNzAsImV4cCI6MjEwOTQ5NDE3MH0.lmYfQeXAq6oPZ-UMj8AQXQq2snU78FatLMbwRftaMyM';
+const SUPABASE_ANON_KEY = 'sb_publishable_f5py08cOv3Bdo0Yvm6lmbA_VBxnbEsPY';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const householdId = '52f6a501-30e3-4c2a-9c56-8d6268cd7a4e'; 
@@ -119,7 +119,8 @@ async function init() {
 }
 
 async function loadData() {
-  const { data: sumData } = await sb.from('expense_movements').select('amount, type').eq('household_id', householdId);
+  const { data: sumData, error: err } = await sb.from('expense_movements').select('amount, type').eq('household_id', householdId);
+  if (err) { console.error("Supabase Error:", err); return; }
   let gastos=0, depositos=0;
   if (sumData) sumData.forEach(r => { if(r.type==='gasto') gastos+=Number(r.amount); if(r.type==='deposito') depositos+=Number(r.amount); });
   currentBalance = depositos - gastos;
