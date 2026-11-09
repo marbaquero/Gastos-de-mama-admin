@@ -36,10 +36,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 </style>
 </head>
 <body>
-<div id="auth-gate" class="w" style="text-align:center;margin-top:100px;display:none">
-  <h2>Verificando cuenta...</h2>
-</div>
-<div id="app" class="w hide">
+<div id="app" class="w">
   <h1>Gastos de Mamá — Administrador</h1>
   <div class="c">
     <div class="top-row">
@@ -69,34 +66,19 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
       <button class="btn-small" style="background:#eee;color:#000" data-filter="gasto">Solo gastos</button>
       <button class="btn-small" style="background:#eee;color:#000" data-filter="deposito">Solo depósitos</button>
     </div>
-    
-    <select id="f-month" style="margin-bottom:12px; max-width:200px;">
-      <option value="">Todos los meses</option>
-    </select>
-
+    <select id="f-month" style="margin-bottom:12px; max-width:200px;"><option value="">Todos los meses</option></select>
     <div class="mut" style="margin-bottom:10px">Por persona: 
       <button class="btn-small" data-person="Aracely">Aracely</button>
       <button class="btn-small" data-person="Genesis">Genesis</button>
       <button class="btn-small" data-person="Ibeth">Ibeth</button>
     </div>
-
     <div>
       <button class="bulk-btn" id="btn-sel-all">Seleccionar todo</button>
       <button class="bulk-btn" id="btn-deselect">Deseleccionar</button>
     </div>
     <button class="bulk-del" id="btn-del-sel">Eliminar seleccionados</button>
-
     <table id="t-movs">
-      <thead>
-        <tr>
-          <th style="width:40px"></th>
-          <th>Fecha</th>
-          <th>Descripción</th>
-          <th class="m">Monto</th>
-          <th>Recibo</th>
-          <th></th>
-        </tr>
-      </thead>
+      <thead><tr><th style="width:40px"></th><th>Fecha</th><th>Descripción</th><th class="m">Monto</th><th>Recibo</th><th></th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -106,32 +88,17 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
   <div class="modal-content">
     <h2>Editar Movimiento</h2>
     <input type="hidden" id="e-id">
-    
-    <label>Fecha</label>
-    <input type="date" id="e-fecha">
-    
-    <label>Monto</label>
-    <input type="number" step="0.01" id="e-monto">
-    
-    <label>Descripción</label>
-    <input type="text" id="e-desc">
-    
+    <label>Fecha</label><input type="date" id="e-fecha">
+    <label>Monto</label><input type="number" step="0.01" id="e-monto">
+    <label>Descripción</label><input type="text" id="e-desc">
     <label>Registrado por</label>
     <select id="e-person">
-      <option value="Admin">Admin</option>
-      <option value="Aracely">Aracely</option>
-      <option value="Genesis">Genesis</option>
-      <option value="Ibeth">Ibeth</option>
+      <option value="Admin">Admin</option><option value="Aracely">Aracely</option><option value="Genesis">Genesis</option><option value="Ibeth">Ibeth</option>
     </select>
-
     <label>Recibo</label>
     <div id="e-recibo-wrap"></div>
     <input type="file" id="e-file" accept="image/*" style="margin-top:8px; border:none; padding:0;">
-
-    <div class="modal-actions">
-      <button class="cancel" onclick="closeEdit()">Cancelar</button>
-      <button onclick="saveEdit()">Guardar Cambios</button>
-    </div>
+    <div class="modal-actions"><button class="cancel" onclick="closeEdit()">Cancelar</button><button onclick="saveEdit()">Guardar Cambios</button></div>
   </div>
 </div>
 
@@ -140,45 +107,14 @@ const SUPABASE_URL = 'https://fftnffmttuzfftntzzhu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmdG5mZm10dHV6ZmZ0bnR6emh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MTgxNzAsImV4cCI6MjEwOTQ5NDE3MH0.lmYfQeXAq6oPZ-UMj8AQXQq2snU78FatLMbwRftaMyM';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let householdId = null;
-let currentFilter = 'todos';
-let currentPerson = null;
-let currentMonth = '';
-let currentBalance = 0;
-let currentReceipt = null;
+const householdId = '52f6a501-30e3-4c2a-9c56-8d6268cd7a4e'; 
+let currentFilter = 'todos'; let currentPerson = null; let currentMonth = ''; let currentBalance = 0; let currentReceipt = null;
 
 async function init() {
-  document.getElementById('auth-gate').style.display = 'block';
-  const { data: { session } } = await sb.auth.getSession();
-  
-  if (!session) { 
-    location.href = '/portal.html'; 
-    return; 
-  }
-
-  const { data: member } = await sb.from('household_members').select('household_id, role').eq('user_id', session.user.id).maybeSingle();
-  
-  if (!member) {
-    document.getElementById('auth-gate').innerHTML = '<h2>Error: Tu cuenta no está vinculada a una familia.</h2><a href="/portal.html">Volver al portal</a>';
-    return;
-  }
-  if (member.role !== 'owner') {
-    document.getElementById('auth-gate').innerHTML = '<h2>Error: No tienes permiso para ver el área de administración.</h2><a href="/portal.html">Volver al portal</a>';
-    return;
-  }
-
-  householdId = member.household_id;
-  document.getElementById('auth-gate').style.display = 'none';
-  document.getElementById('app').classList.remove('hide');
-  
   document.getElementById('f-fecha').valueAsDate = new Date();
-  
   const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
   const monthFilter = document.getElementById('f-month');
-  meses.forEach((m,i)=>{ 
-    let o2=document.createElement('option'); o2.value=i+1; o2.text=m; monthFilter.appendChild(o2);
-  });
-
+  meses.forEach((m,i)=>{ let o2=document.createElement('option'); o2.value=i+1; o2.text=m; monthFilter.appendChild(o2); });
   loadData();
 }
 
@@ -186,7 +122,6 @@ async function loadData() {
   const { data: sumData } = await sb.from('expense_movements').select('amount, type').eq('household_id', householdId);
   let gastos=0, depositos=0;
   if (sumData) sumData.forEach(r => { if(r.type==='gasto') gastos+=Number(r.amount); if(r.type==='deposito') depositos+=Number(r.amount); });
-  
   currentBalance = depositos - gastos;
   document.getElementById('saldo').textContent = `$${currentBalance.toFixed(2)}`;
   document.getElementById('tot-gastos').textContent = `$${gastos.toFixed(2)}`;
@@ -195,7 +130,6 @@ async function loadData() {
   let q = sb.from('expense_movements').select('*').eq('household_id', householdId).order('created_at', {ascending:false}).limit(100);
   if (currentFilter !== 'todos') q = q.eq('type', currentFilter);
   if (currentPerson) q = q.eq('registered_by', currentPerson);
-  
   if (currentMonth) {
     const year = new Date().getFullYear();
     const start = `${year}-${currentMonth.toString().padStart(2,'0')}-01`;
@@ -218,12 +152,7 @@ async function loadData() {
         <td><span class="mut" style="font-size:12px">${m.description||''}</span>${m.registered_by ? ` <span style="color:#3b82f6; text-decoration:underline; cursor:pointer" onclick="document.querySelector('[data-person=\\'${m.registered_by}\\']').click()">${m.registered_by}</span>` : ''}</td>
         <td class="m"><b class="${isG?'gas':'dep'}">${isG?'-':'+'}$${Number(m.amount).toFixed(2)}</b></td>
         <td>${recibo}</td>
-        <td>
-          <div class="action-buttons">
-            <button class="btn-edit" onclick='openEdit(${JSON.stringify(m)})'>✎</button>
-            <button class="del" onclick="deleteMov(${m.id})">X</button>
-          </div>
-        </td>
+        <td><div class="action-buttons"><button class="btn-edit" onclick='openEdit(${JSON.stringify(m)})'>✎</button><button class="del" onclick="deleteMov(${m.id})">X</button></div></td>
       </tr>
     `;
   });
@@ -241,22 +170,15 @@ window.openEdit = (m) => {
   document.getElementById('e-monto').value = m.amount;
   document.getElementById('e-desc').value = m.description || '';
   document.getElementById('e-person').value = m.registered_by || 'Admin';
-  
   currentReceipt = m.receipt_path;
   const wrap = document.getElementById('e-recibo-wrap');
-  if(currentReceipt) {
-    wrap.innerHTML = `<span style="color:#067647; font-size:14px">✓ Recibo actual guardado</span> <button type="button" class="btn-small" onclick="verRecibo('${currentReceipt}')">Ver</button>`;
-  } else {
-    wrap.innerHTML = `<span style="color:#68707d; font-size:14px">Sin recibo</span>`;
-  }
-  
+  if(currentReceipt) wrap.innerHTML = `<span style="color:#067647; font-size:14px">✓ Recibo actual guardado</span> <button type="button" class="btn-small" onclick="verRecibo('${currentReceipt}')">Ver</button>`;
+  else wrap.innerHTML = `<span style="color:#68707d; font-size:14px">Sin recibo</span>`;
   document.getElementById('e-file').value = '';
   document.getElementById('edit-modal').classList.add('active');
 };
 
-window.closeEdit = () => {
-  document.getElementById('edit-modal').classList.remove('active');
-};
+window.closeEdit = () => document.getElementById('edit-modal').classList.remove('active');
 
 window.saveEdit = async () => {
   const id = document.getElementById('e-id').value;
@@ -265,26 +187,15 @@ window.saveEdit = async () => {
   const desc = document.getElementById('e-desc').value;
   const person = document.getElementById('e-person').value;
   const file = document.getElementById('e-file').files[0];
-  
   if(!monto || monto <= 0) return alert("Monto inválido");
-  
   let newReceiptPath = currentReceipt;
-  
   if (file) {
     const ext = file.name.split('.').pop();
     newReceiptPath = `${householdId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
     const { error: upErr } = await sb.storage.from('recibos').upload(newReceiptPath, file);
     if(upErr) return alert("Error subiendo recibo: " + upErr.message);
   }
-
-  const { error } = await sb.from('expense_movements').update({
-    movement_date: fecha,
-    amount: monto,
-    description: desc,
-    registered_by: person,
-    receipt_path: newReceiptPath
-  }).eq('id', id).eq('household_id', householdId);
-
+  const { error } = await sb.from('expense_movements').update({ movement_date: fecha, amount: monto, description: desc, registered_by: person, receipt_path: newReceiptPath }).eq('id', id).eq('household_id', householdId);
   if(error) alert(error.message);
   else { closeEdit(); loadData(); }
 };
@@ -310,16 +221,7 @@ document.getElementById('f-month').onchange = (e) => { currentMonth = e.target.v
 document.getElementById('btn-add').onclick = async () => {
   const monto = parseFloat(document.getElementById('f-monto').value);
   if(!monto || monto<=0) return alert("Monto inválido");
-  
-  const { error } = await sb.from('expense_movements').insert({
-    household_id: householdId,
-    movement_date: document.getElementById('f-fecha').value,
-    type: 'deposito',
-    amount: monto,
-    description: document.getElementById('f-desc').value,
-    registered_by: 'Admin'
-  });
-  
+  const { error } = await sb.from('expense_movements').insert({ household_id: householdId, movement_date: document.getElementById('f-fecha').value, type: 'deposito', amount: monto, description: document.getElementById('f-desc').value, registered_by: 'Admin' });
   if(error) { document.getElementById('msg-add').textContent = error.message; document.getElementById('msg-add').className='msg err'; }
   else { document.getElementById('f-monto').value=''; document.getElementById('msg-add').textContent='Depósito guardado.'; document.getElementById('msg-add').className='msg'; loadData(); }
   document.getElementById('msg-add').classList.remove('hide');
@@ -330,22 +232,11 @@ document.getElementById('btn-edit-bal').onclick = async () => {
   if (nuevo === null) return;
   const target = parseFloat(nuevo);
   if (isNaN(target)) return alert("Monto inválido");
-  
   const diff = target - currentBalance;
   if (diff === 0) return;
-
   const type = diff > 0 ? 'deposito' : 'gasto';
   const amount = Math.abs(diff);
-
-  const { error } = await sb.from('expense_movements').insert({
-    household_id: householdId,
-    movement_date: new Date().toISOString().split('T')[0],
-    type: type,
-    amount: amount,
-    description: 'Ajuste manual de saldo',
-    registered_by: 'Admin'
-  });
-
+  const { error } = await sb.from('expense_movements').insert({ household_id: householdId, movement_date: new Date().toISOString().split('T')[0], type: type, amount: amount, description: 'Ajuste manual de saldo', registered_by: 'Admin' });
   if(error) alert(error.message);
   else loadData();
 };
@@ -359,12 +250,8 @@ document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => {
 
 document.querySelectorAll('[data-person]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-person]').forEach(x=>{x.style.background='#eee'; x.style.color='#000';});
-  if (currentPerson === b.dataset.person) {
-    currentPerson = null; 
-  } else {
-    currentPerson = b.dataset.person;
-    b.style.background='#111'; b.style.color='#fff';
-  }
+  if (currentPerson === b.dataset.person) { currentPerson = null; } 
+  else { currentPerson = b.dataset.person; b.style.background='#111'; b.style.color='#fff'; }
   loadData();
 });
 
