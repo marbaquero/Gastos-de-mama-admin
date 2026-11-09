@@ -25,11 +25,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 .bulk-btn{background:#111;color:#fff;width:auto;padding:10px 16px;margin-right:8px}
 .bulk-del{background:#fee2e2;color:#991b1b;width:auto;padding:10px 16px;margin-top:10px;margin-bottom:10px}
 .btn-recibo{background:#111;color:#fff;padding:4px 8px;font-size:12px;border-radius:6px;margin-left:8px;width:auto}
-
-/* Action buttons alignment */
 .action-buttons { display: flex; gap: 6px; justify-content: flex-end; }
-
-/* Modal Styles */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
 .modal-overlay.active { display: flex; }
 .modal-content { background: #fff; border-radius: 16px; padding: 24px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
@@ -45,7 +41,6 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 </div>
 <div id="app" class="w hide">
   <h1>Gastos de Mamá — Administrador</h1>
-  
   <div class="c">
     <div class="top-row">
       <div>
@@ -107,7 +102,6 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
   </div>
 </div>
 
-<!-- Edit Modal -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal-content">
     <h2>Editar Movimiento</h2>
@@ -156,9 +150,14 @@ let currentReceipt = null;
 async function init() {
   document.getElementById('auth-gate').style.display = 'block';
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { location.href = '/portal.html'; return; }
+  
+  if (!session) { 
+    location.href = '/portal.html'; 
+    return; 
+  }
 
   const { data: member } = await sb.from('household_members').select('household_id, role').eq('user_id', session.user.id).maybeSingle();
+  
   if (!member) {
     document.getElementById('auth-gate').innerHTML = '<h2>Error: Tu cuenta no está vinculada a una familia.</h2><a href="/portal.html">Volver al portal</a>';
     return;
