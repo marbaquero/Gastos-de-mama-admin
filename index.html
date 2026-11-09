@@ -3,13 +3,9 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Gastos de Mamá — Administrador</title>
-<link rel="apple-touch-icon" href="icono-gastos-admin.png">
-<link rel="icon" type="image/png" href="icono-gastos-admin.png">
-<meta name="apple-mobile-web-app-title" content="Gastos Admin">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 *{box-sizing:border-box}body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:0;background:#f3f4f6;color:#111827}
-.w{max-width:860px;margin:auto;padding:14px}.c{background:#fff;border-radius:18px;padding:18px;margin:12px 0;position:relative}
+.w{max-width:860px;margin:auto;padding:14px}.c{background:#fff;border-radius:18px;padding:18px;margin:12px 0}
 h1{font-size:28px}.bal{font-size:38px;font-weight:800}.mut{color:#68707d;font-size:14px}
 label{display:block;font-weight:700;margin:14px 0 6px}input,select,button{width:100%;font:inherit;border-radius:12px}
 input,select{padding:13px;border:1px solid #ccd0d5;background:#fff}button{padding:14px;border:0;background:#111;color:#fff;font-weight:700;cursor:pointer}
@@ -21,242 +17,157 @@ table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:9px 4px;b
 .btn-small{padding:7px 9px;margin:0;width:auto;font-size:13px}
 .msg{padding:10px;border-radius:10px;background:#ecfdf3;color:#067647;margin:10px 0}.err{background:#fef3f2;color:#b42318}
 .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-.top-row{display:flex;justify-content:space-between;align-items:flex-start;}
+.top-row{display:flex;justify-content:space-between;align-items:flex-start}
 .bulk-btn{background:#111;color:#fff;width:auto;padding:10px 16px;margin-right:8px}
 .bulk-del{background:#fee2e2;color:#991b1b;width:auto;padding:10px 16px;margin-top:10px;margin-bottom:10px}
 .btn-recibo{background:#111;color:#fff;padding:4px 8px;font-size:12px;border-radius:6px;margin-left:8px;width:auto}
-.action-buttons { display: flex; gap: 6px; justify-content: flex-end; }
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
-.modal-overlay.active { display: flex; }
-.modal-content { background: #fff; border-radius: 16px; padding: 24px; max-width: 500px; width: 100%; max-height: 90vh; overflow-y: auto; }
-.modal-content h2 { margin-top: 0; }
-.modal-actions { display: flex; gap: 10px; margin-top: 20px; }
-.modal-actions button { flex: 1; }
-.modal-actions .cancel { background: #e5e7eb; color: #111; }
+.action-buttons{display:flex;gap:6px;justify-content:flex-end}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;justify-content:center;align-items:center;z-index:1000;padding:20px}
+.modal-overlay.active{display:flex}.modal-content{background:#fff;border-radius:16px;padding:24px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto}
+.modal-actions{display:flex;gap:10px;margin-top:20px}.modal-actions button{flex:1}.modal-actions .cancel{background:#e5e7eb;color:#111}
 </style>
 </head>
 <body>
-<div id="app" class="w">
-  <h1>Gastos de Mamá — Administrador</h1>
-  <div class="c">
-    <div class="top-row">
-      <div>
-        <div class="mut">Saldo disponible</div>
-        <div class="bal" id="saldo">$0.00</div>
-        <div class="mut">Total gastos: <span id="tot-gastos">$0.00</span></div>
-        <div class="mut">Total depósitos: <span id="tot-depositos">$0.00</span></div>
-      </div>
-      <button class="btn-edit" id="btn-edit-bal">✎ Editar</button>
-    </div>
-  </div>
-
-  <div class="c">
-    <h2>Nuevo depósito</h2>
-    <label>Fecha</label><input type="date" id="f-fecha">
-    <label>Monto</label><input type="number" step="0.01" id="f-monto">
-    <label>Descripción</label><input type="text" id="f-desc" value="Depósito">
-    <button id="btn-add">Agregar depósito</button>
-    <div id="msg-add" class="msg hide"></div>
-  </div>
-
-  <div class="c">
-    <h2>Todos los movimientos</h2>
-    <div class="toolbar">
-      <button class="btn-small" style="background:#111;color:#fff" data-filter="todos">Todos</button>
-      <button class="btn-small" style="background:#eee;color:#000" data-filter="gasto">Solo gastos</button>
-      <button class="btn-small" style="background:#eee;color:#000" data-filter="deposito">Solo depósitos</button>
-    </div>
-    <select id="f-month" style="margin-bottom:12px; max-width:200px;"><option value="">Todos los meses</option></select>
-    <div class="mut" style="margin-bottom:10px">Por persona: 
-      <button class="btn-small" data-person="Aracely">Aracely</button>
-      <button class="btn-small" data-person="Genesis">Genesis</button>
-      <button class="btn-small" data-person="Ibeth">Ibeth</button>
-    </div>
-    <div>
-      <button class="bulk-btn" id="btn-sel-all">Seleccionar todo</button>
-      <button class="bulk-btn" id="btn-deselect">Deseleccionar</button>
-    </div>
-    <button class="bulk-del" id="btn-del-sel">Eliminar seleccionados</button>
-    <table id="t-movs">
-      <thead><tr><th style="width:40px"></th><th>Fecha</th><th>Descripción</th><th class="m">Monto</th><th>Recibo</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </div>
+<div class="w">
+<h1>Gastos de Mamá — Administrador</h1>
+<div class="c"><div class="top-row"><div><div class="mut">Saldo disponible</div><div class="bal" id="saldo">$0.00</div><div class="mut">Total gastos: <span id="tot-gastos">$0.00</span></div><div class="mut">Total depósitos: <span id="tot-depositos">$0.00</span></div></div><button class="btn-edit" id="btn-edit-bal">✎ Editar</button></div></div>
+<div class="c"><h2>Nuevo depósito</h2><label>Fecha</label><input type="date" id="f-fecha"><label>Monto</label><input type="number" step="0.01" id="f-monto"><label>Descripción</label><input type="text" id="f-desc" value="Depósito"><button id="btn-add">Agregar depósito</button><div id="msg-add" class="msg hide"></div></div>
+<div class="c"><h2>Reporte mensual</h2><div class="grid"><div><label>Mes</label><select id="rm"></select></div><div><label>Año</label><select id="ry"></select></div></div><button id="gr">Generar reporte</button><div id="reportCard" class="hide" style="margin-top:14px"><p id="rperiod"></p><p>Saldo inicial: <b id="ri"></b><br>Gastos del mes: <b id="re"></b><br>Depósitos del mes: <b id="rd"></b><br>Saldo del mes: <b id="rn"></b><br>Saldo final: <b id="rf"></b></p><div id="rtable"></div></div></div>
+<div class="c"><h2>Todos los movimientos</h2>
+<div class="toolbar"><button class="btn-small" style="background:#111;color:#fff" data-filter="todos">Todos</button><button class="btn-small" style="background:#eee;color:#000" data-filter="gasto">Solo gastos</button><button class="btn-small" style="background:#eee;color:#000" data-filter="deposito">Solo depósitos</button></div>
+<select id="f-month" style="margin-bottom:12px;max-width:200px"><option value="">Todos los meses</option></select>
+<div class="mut" style="margin-bottom:10px">Por persona: <button class="btn-small" data-person="Aracely">Aracely</button> <button class="btn-small" data-person="Genesis">Genesis</button> <button class="btn-small" data-person="Ibeth">Ibeth</button></div>
+<div><button class="bulk-btn" id="btn-sel-all">Seleccionar todo</button><button class="bulk-btn" id="btn-deselect">Deseleccionar</button></div><button class="bulk-del" id="btn-del-sel">Eliminar seleccionados</button>
+<table id="t-movs"><thead><tr><th style="width:40px"></th><th>Fecha</th><th>Descripción</th><th class="m">Monto</th><th>Recibo</th><th></th></tr></thead><tbody></tbody></table></div>
 </div>
-
-<div class="modal-overlay" id="edit-modal">
-  <div class="modal-content">
-    <h2>Editar Movimiento</h2>
-    <input type="hidden" id="e-id">
-    <label>Fecha</label><input type="date" id="e-fecha">
-    <label>Monto</label><input type="number" step="0.01" id="e-monto">
-    <label>Descripción</label><input type="text" id="e-desc">
-    <label>Registrado por</label>
-    <select id="e-person">
-      <option value="Admin">Admin</option><option value="Aracely">Aracely</option><option value="Genesis">Genesis</option><option value="Ibeth">Ibeth</option>
-    </select>
-    <label>Recibo</label>
-    <div id="e-recibo-wrap"></div>
-    <input type="file" id="e-file" accept="image/*" style="margin-top:8px; border:none; padding:0;">
-    <div class="modal-actions"><button class="cancel" onclick="closeEdit()">Cancelar</button><button onclick="saveEdit()">Guardar Cambios</button></div>
-  </div>
-</div>
-
+<div class="modal-overlay" id="edit-modal"><div class="modal-content"><h2>Editar Movimiento</h2><input type="hidden" id="e-id"><label>Fecha</label><input type="date" id="e-fecha"><label>Monto</label><input type="number" step="0.01" id="e-monto"><label>Descripción</label><input type="text" id="e-desc"><label>Registrado por</label><select id="e-person"><option value="Admin">Admin</option><option value="Aracely">Aracely</option><option value="Genesis">Genesis</option><option value="Ibeth">Ibeth</option></select><label>Recibo</label><div id="e-recibo-wrap"></div><input type="file" id="e-file" accept="image/*" style="margin-top:8px;border:none;padding:0"><div class="modal-actions"><button class="cancel" onclick="closeEdit()">Cancelar</button><button onclick="saveEdit()">Guardar Cambios</button></div></div></div>
 <script>
-const SUPABASE_URL = 'https://fftnffmttuzfftntzzhu.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_f5py08cOv3Bdo0Yvm6lmbA_VBxnbEsPY';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-const householdId = '52f6a501-30e3-4c2a-9c56-8d6268cd7a4e'; 
-let currentFilter = 'todos'; let currentPerson = null; let currentMonth = ''; let currentBalance = 0; let currentReceipt = null;
-
-async function init() {
-  document.getElementById('f-fecha').valueAsDate = new Date();
-  const meses = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
-  const monthFilter = document.getElementById('f-month');
-  meses.forEach((m,i)=>{ let o2=document.createElement('option'); o2.value=i+1; o2.text=m; monthFilter.appendChild(o2); });
-  loadData();
+// SAME PROJECT AS CUIDADORA ORIGINAL - this is the fix
+const SUPA_URL='https://ywegbbdnphbbqiimqhqf.supabase.co';
+const SUPA_KEY='sb_publishable_3RLMrZi5yuz9kxeAiMkSMw_y4foVtyu';
+const H={apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY,'Content-Type':'application/json'};
+const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0);
+let currentFilter='todos',currentPerson=null,currentMonth='',currentBalance=0,currentReceipt=null,ALL=[];
+async function api(path,opts={}){
+  const r=await fetch(SUPA_URL+'/rest/v1/'+path,{...opts,headers:{...H,...(opts.headers||{})}});
+  if(!r.ok) throw Error(await r.text());
+  const txt=await r.text(); return txt?JSON.parse(txt):null;
 }
-
-async function loadData() {
-  const { data: sumData, error: err } = await sb.from('expense_movements').select('amount, type').eq('household_id', householdId);
-  if (err) { console.error("Supabase Error:", err); return; }
-  let gastos=0, depositos=0;
-  if (sumData) sumData.forEach(r => { if(r.type==='gasto') gastos+=Number(r.amount); if(r.type==='deposito') depositos+=Number(r.amount); });
-  currentBalance = depositos - gastos;
-  document.getElementById('saldo').textContent = `$${currentBalance.toFixed(2)}`;
-  document.getElementById('tot-gastos').textContent = `$${gastos.toFixed(2)}`;
-  document.getElementById('tot-depositos').textContent = `$${depositos.toFixed(2)}`;
-
-  let q = sb.from('expense_movements').select('*').eq('household_id', householdId).order('created_at', {ascending:false}).limit(100);
-  if (currentFilter !== 'todos') q = q.eq('type', currentFilter);
-  if (currentPerson) q = q.eq('registered_by', currentPerson);
-  if (currentMonth) {
-    const year = new Date().getFullYear();
-    const start = `${year}-${currentMonth.toString().padStart(2,'0')}-01`;
-    const end = new Date(year, currentMonth, 0).toISOString().split('T')[0];
-    q = q.gte('movement_date', start).lte('movement_date', end);
-  }
-  
-  const { data: movs } = await q;
-  const tbody = document.querySelector('#t-movs tbody');
-  tbody.innerHTML = '';
-  if(!movs || movs.length===0){ tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:#666">No hay movimientos</td></tr>'; return; }
-  
-  movs.forEach(m => {
-    const isG = m.type === 'gasto';
-    const recibo = m.receipt_path ? `<button class="btn-recibo" onclick="verRecibo('${m.receipt_path}')">Ver recibo</button>` : '';
-    tbody.innerHTML += `
-      <tr>
-        <td><input type="checkbox" class="row-check" data-id="${m.id}"></td>
-        <td>${new Date(m.movement_date).toLocaleDateString()}</td>
-        <td><span class="mut" style="font-size:12px">${m.description||''}</span>${m.registered_by ? ` <span style="color:#3b82f6; text-decoration:underline; cursor:pointer" onclick="document.querySelector('[data-person=\\'${m.registered_by}\\']').click()">${m.registered_by}</span>` : ''}</td>
-        <td class="m"><b class="${isG?'gas':'dep'}">${isG?'-':'+'}$${Number(m.amount).toFixed(2)}</b></td>
-        <td>${recibo}</td>
-        <td><div class="action-buttons"><button class="btn-edit" onclick='openEdit(${JSON.stringify(m)})'>✎</button><button class="del" onclick="deleteMov(${m.id})">X</button></div></td>
-      </tr>
-    `;
-  });
+async function loadData(){
+  try{
+    const data=await api('movimientos?select=*&order=fecha.desc,creado_en.desc&limit=500');
+    ALL=data||[];
+    let gastos=0,depositos=0; ALL.forEach(x=>{if(x.tipo==='gasto')gastos+=+x.monto; if(x.tipo==='deposito')depositos+=+x.monto;});
+    currentBalance=depositos-gastos;
+    document.getElementById('saldo').textContent=money(currentBalance);
+    document.getElementById('tot-gastos').textContent=money(gastos);
+    document.getElementById('tot-depositos').textContent=money(depositos);
+    let f=[...ALL];
+    if(currentFilter!=='todos') f=f.filter(x=>x.tipo===currentFilter);
+    if(currentPerson) f=f.filter(x=>(x.registrado_por||'')===currentPerson);
+    if(currentMonth) f=f.filter(x=>(x.fecha||'').startsWith(new Date().getFullYear()+'-'+String(currentMonth).padStart(2,'0')));
+    const tbody=document.querySelector('#t-movs tbody'); tbody.innerHTML='';
+    if(!f.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#666">No hay movimientos</td></tr>';return;}
+    f.forEach(m=>{
+      const isG=m.tipo==='gasto';
+      const recibo=m.recibo_url?`<button class="btn-recibo" onclick="verRecibo('${m.recibo_url}')">Ver recibo</button>`:'';
+      tbody.innerHTML+=`<tr><td><input type="checkbox" class="row-check" data-id="${m.id}"></td><td>${m.fecha}</td><td><span class="mut" style="font-size:12px">${(m.descripcion||'').replace(/</g,'&lt;')}</span>${m.registrado_por?` <span style="color:#3b82f6;text-decoration:underline;cursor:pointer">${m.registrado_por}</span>`:''}</td><td class="m"><b class="${isG?'gas':'dep'}">${isG?'-':'+'}${money(m.monto)}</b></td><td>${recibo}</td><td><div class="action-buttons"><button class="btn-edit" onclick='openEdit(${m.id})'>✎</button><button class="del" onclick="deleteMov(${m.id})">X</button></div></td></tr>`;
+    });
+  }catch(e){console.error(e); alert('Error cargando: '+e.message);}
 }
-
-window.verRecibo = async (path) => {
-  const { data, error } = await sb.storage.from('recibos').createSignedUrl(path, 60);
-  if(error) return alert("Error: " + error.message);
-  window.open(data.signedUrl, '_blank');
-};
-
-window.openEdit = (m) => {
-  document.getElementById('e-id').value = m.id;
-  document.getElementById('e-fecha').value = m.movement_date;
-  document.getElementById('e-monto').value = m.amount;
-  document.getElementById('e-desc').value = m.description || '';
-  document.getElementById('e-person').value = m.registered_by || 'Admin';
-  currentReceipt = m.receipt_path;
-  const wrap = document.getElementById('e-recibo-wrap');
-  if(currentReceipt) wrap.innerHTML = `<span style="color:#067647; font-size:14px">✓ Recibo actual guardado</span> <button type="button" class="btn-small" onclick="verRecibo('${currentReceipt}')">Ver</button>`;
-  else wrap.innerHTML = `<span style="color:#68707d; font-size:14px">Sin recibo</span>`;
-  document.getElementById('e-file').value = '';
+async function verRecibo(path){
+  if(!path) return;
+  const w=window.open('','_blank');
+  try{
+    const r=await fetch(SUPA_URL+'/storage/v1/object/sign/recibos/'+encodeURI(path),{method:'POST',headers:{apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:300})});
+    if(!r.ok) throw Error(await r.text());
+    const j=await r.json(), signed=j.signedURL||j.signedUrl;
+    if(w) w.location.href=SUPA_URL+'/storage/v1'+signed; else window.open(SUPA_URL+'/storage/v1'+signed,'_blank');
+  }catch(e){ if(w) w.close(); alert('No se pudo abrir el recibo.');}
+}
+window.verRecibo=verRecibo;
+window.openEdit=(id)=>{
+  const m=ALL.find(x=>x.id===id); if(!m) return;
+  document.getElementById('e-id').value=m.id;
+  document.getElementById('e-fecha').value=m.fecha;
+  document.getElementById('e-monto').value=m.monto;
+  document.getElementById('e-desc').value=m.descripcion||'';
+  document.getElementById('e-person').value=m.registrado_por||'Admin';
+  currentReceipt=m.recibo_url;
+  const wrap=document.getElementById('e-recibo-wrap');
+  wrap.innerHTML=currentReceipt?`<span style="color:#067647;font-size:14px">✓ Recibo actual guardado</span> <button type="button" class="btn-small" onclick="verRecibo('${currentReceipt}')">Ver</button>`:`<span style="color:#68707d;font-size:14px">Sin recibo</span>`;
+  document.getElementById('e-file').value='';
   document.getElementById('edit-modal').classList.add('active');
 };
-
-window.closeEdit = () => document.getElementById('edit-modal').classList.remove('active');
-
-window.saveEdit = async () => {
-  const id = document.getElementById('e-id').value;
-  const fecha = document.getElementById('e-fecha').value;
-  const monto = parseFloat(document.getElementById('e-monto').value);
-  const desc = document.getElementById('e-desc').value;
-  const person = document.getElementById('e-person').value;
-  const file = document.getElementById('e-file').files[0];
-  if(!monto || monto <= 0) return alert("Monto inválido");
-  let newReceiptPath = currentReceipt;
-  if (file) {
-    const ext = file.name.split('.').pop();
-    newReceiptPath = `${householdId}/${Date.now()}-${crypto.randomUUID()}.${ext}`;
-    const { error: upErr } = await sb.storage.from('recibos').upload(newReceiptPath, file);
-    if(upErr) return alert("Error subiendo recibo: " + upErr.message);
-  }
-  const { error } = await sb.from('expense_movements').update({ movement_date: fecha, amount: monto, description: desc, registered_by: person, receipt_path: newReceiptPath }).eq('id', id).eq('household_id', householdId);
-  if(error) alert(error.message);
-  else { closeEdit(); loadData(); }
+window.closeEdit=()=>document.getElementById('edit-modal').classList.remove('active');
+window.saveEdit=async()=>{
+  const id=document.getElementById('e-id').value;
+  const fecha=document.getElementById('e-fecha').value;
+  const monto=parseFloat(document.getElementById('e-monto').value);
+  const desc=document.getElementById('e-desc').value;
+  const person=document.getElementById('e-person').value;
+  const file=document.getElementById('e-file').files[0];
+  if(!monto||monto<=0) return alert("Monto inválido");
+  let newPath=currentReceipt;
+  try{
+    if(file){
+      const name=Date.now()+'_'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const r=await fetch(SUPA_URL+'/storage/v1/object/recibos/'+encodeURIComponent(name),{method:'POST',headers:{apikey:SUPA_KEY,Authorization:'Bearer '+SUPA_KEY},body:file});
+      if(!r.ok) throw Error(await r.text());
+      newPath=name;
+    }
+    await api('movimientos?id=eq.'+id,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({fecha,monto,descripcion:desc,registrado_por:person,recibo_url:newPath})});
+    closeEdit(); loadData();
+  }catch(e){alert(e.message);}
 };
-
-window.deleteMov = async (id) => {
-  if(!confirm("¿Borrar movimiento?")) return;
-  const { error } = await sb.from('expense_movements').delete().eq('id', id).eq('household_id', householdId);
-  if(!error) loadData();
+window.deleteMov=async(id)=>{if(!confirm("¿Borrar movimiento?"))return; try{await api('movimientos?id=eq.'+id,{method:'DELETE'}); loadData();}catch(e){alert(e.message);}};
+document.getElementById('btn-sel-all').onclick=()=>document.querySelectorAll('.row-check').forEach(c=>c.checked=true);
+document.getElementById('btn-deselect').onclick=()=>document.querySelectorAll('.row-check').forEach(c=>c.checked=false);
+document.getElementById('btn-del-sel').onclick=async()=>{
+  const checks=[...document.querySelectorAll('.row-check')].filter(c=>c.checked).map(c=>c.dataset.id);
+  if(!checks.length) return alert("Selecciona al menos un movimiento");
+  if(!confirm(`¿Borrar ${checks.length} movimientos?`))return;
+  try{await api('movimientos?id=in.('+checks.join(',')+')',{method:'DELETE'}); loadData();}catch(e){alert(e.message);}
 };
-
-document.getElementById('btn-sel-all').onclick = () => document.querySelectorAll('.row-check').forEach(c => c.checked = true);
-document.getElementById('btn-deselect').onclick = () => document.querySelectorAll('.row-check').forEach(c => c.checked = false);
-document.getElementById('btn-del-sel').onclick = async () => {
-  const checks = [...document.querySelectorAll('.row-check')].filter(c => c.checked).map(c => c.dataset.id);
-  if(checks.length === 0) return alert("Selecciona al menos un movimiento");
-  if(!confirm(`¿Borrar ${checks.length} movimientos?`)) return;
-  const { error } = await sb.from('expense_movements').delete().in('id', checks).eq('household_id', householdId);
-  if(!error) loadData();
-};
-
-document.getElementById('f-month').onchange = (e) => { currentMonth = e.target.value; loadData(); };
-
-document.getElementById('btn-add').onclick = async () => {
-  const monto = parseFloat(document.getElementById('f-monto').value);
-  if(!monto || monto<=0) return alert("Monto inválido");
-  const { error } = await sb.from('expense_movements').insert({ household_id: householdId, movement_date: document.getElementById('f-fecha').value, type: 'deposito', amount: monto, description: document.getElementById('f-desc').value, registered_by: 'Admin' });
-  if(error) { document.getElementById('msg-add').textContent = error.message; document.getElementById('msg-add').className='msg err'; }
-  else { document.getElementById('f-monto').value=''; document.getElementById('msg-add').textContent='Depósito guardado.'; document.getElementById('msg-add').className='msg'; loadData(); }
+document.getElementById('f-month').onchange=(e)=>{currentMonth=e.target.value; loadData();};
+document.getElementById('btn-add').onclick=async()=>{
+  const monto=parseFloat(document.getElementById('f-monto').value);
+  if(!monto||monto<=0) return alert("Monto inválido");
+  try{
+    await api('movimientos',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({tipo:'deposito',fecha:document.getElementById('f-fecha').value,monto,descripcion:document.getElementById('f-desc').value,registrado_por:'Admin'})});
+    document.getElementById('f-monto').value=''; document.getElementById('msg-add').textContent='Depósito guardado.'; document.getElementById('msg-add').className='msg'; loadData();
+  }catch(e){document.getElementById('msg-add').textContent=e.message; document.getElementById('msg-add').className='msg err';}
   document.getElementById('msg-add').classList.remove('hide');
 };
-
-document.getElementById('btn-edit-bal').onclick = async () => {
-  const nuevo = prompt("Ingresa el nuevo saldo disponible (ejemplo: 50.14).", currentBalance.toFixed(2));
-  if (nuevo === null) return;
-  const target = parseFloat(nuevo);
-  if (isNaN(target)) return alert("Monto inválido");
-  const diff = target - currentBalance;
-  if (diff === 0) return;
-  const type = diff > 0 ? 'deposito' : 'gasto';
-  const amount = Math.abs(diff);
-  const { error } = await sb.from('expense_movements').insert({ household_id: householdId, movement_date: new Date().toISOString().split('T')[0], type: type, amount: amount, description: 'Ajuste manual de saldo', registered_by: 'Admin' });
-  if(error) alert(error.message);
-  else loadData();
+document.getElementById('btn-edit-bal').onclick=async()=>{
+  const nuevo=prompt("Ingresa el nuevo saldo disponible (ejemplo: 50.14).",currentBalance.toFixed(2));
+  if(nuevo===null)return;
+  const target=parseFloat(nuevo); if(isNaN(target)) return alert("Monto inválido");
+  const diff=+(target-currentBalance).toFixed(2); if(diff===0)return;
+  const tipo=diff>0?'deposito':'gasto';
+  try{await api('movimientos',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({tipo,fecha:new Date().toISOString().slice(0,10),monto:Math.abs(diff),descripcion:'Ajuste manual de saldo',registrado_por:'Admin'})}); loadData();}catch(e){alert(e.message);}
 };
-
-document.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => {
-  document.querySelectorAll('[data-filter]').forEach(x=>{x.style.background='#eee'; x.style.color='#000';});
-  b.style.background='#111'; b.style.color='#fff';
-  currentFilter = b.dataset.filter;
-  loadData();
-});
-
-document.querySelectorAll('[data-person]').forEach(b => b.onclick = () => {
-  document.querySelectorAll('[data-person]').forEach(x=>{x.style.background='#eee'; x.style.color='#000';});
-  if (currentPerson === b.dataset.person) { currentPerson = null; } 
-  else { currentPerson = b.dataset.person; b.style.background='#111'; b.style.color='#fff'; }
-  loadData();
-});
-
-init();
+document.querySelectorAll('[data-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-filter]').forEach(x=>{x.style.background='#eee';x.style.color='#000';}); b.style.background='#111';b.style.color='#fff'; currentFilter=b.dataset.filter; loadData();});
+document.querySelectorAll('[data-person]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-person]').forEach(x=>{x.style.background='#eee';x.style.color='#000';}); if(currentPerson===b.dataset.person){currentPerson=null;}else{currentPerson=b.dataset.person; b.style.background='#111';b.style.color='#fff';} loadData();});
+const MONTHS=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+MONTHS.forEach((m,i)=>{let o=document.createElement('option');o.value=i+1;o.text=m;document.getElementById('f-month').appendChild(o);let o2=document.createElement('option');o2.value=i+1;o2.text=m;document.getElementById('rm').appendChild(o2);});
+let y=new Date().getFullYear(); for(let n=y+1;n>=2025;n--){let o=document.createElement('option');o.value=n;o.text=n;document.getElementById('ry').appendChild(o);}
+document.getElementById('rm').value=new Date().getMonth()+1; document.getElementById('ry').value=y;
+document.getElementById('f-fecha').valueAsDate=new Date();
+document.getElementById('gr').onclick=async()=>{
+  const yy=+document.getElementById('ry').value,mm=+document.getElementById('rm').value,start=`${yy}-${String(mm).padStart(2,'0')}-01`,next=mm===12?`${yy+1}-01-01`:`${yy}-${String(mm+1).padStart(2,'0')}-01`;
+  try{
+    const before=await api(`movimientos?select=tipo,monto&fecha=lt.${start}`);
+    const rows=await api(`movimientos?select=*&fecha=gte.${start}&fecha=lt.${next}&order=fecha.asc,creado_en.asc`);
+    let initial=0,dep=0,exp=0; (before||[]).forEach(x=>initial+=x.tipo==='deposito'?+x.monto:-x.monto); (rows||[]).forEach(x=>x.tipo==='deposito'?dep+=+x.monto:exp+=+x.monto);
+    const net=dep-exp,final=initial+net;
+    document.getElementById('rperiod').textContent=`${MONTHS[mm-1]} ${yy}`;
+    document.getElementById('ri').textContent=money(initial); document.getElementById('re').textContent=money(exp); document.getElementById('rd').textContent=money(dep); document.getElementById('rn').textContent=money(net); document.getElementById('rf').textContent=money(final);
+    document.getElementById('rtable').innerHTML=rows.length?'<table><tr><th>Fecha</th><th>Descripción</th><th class="m">Gasto</th><th class="m">Depósito</th></tr>'+rows.map(x=>`<tr><td>${x.fecha}</td><td>${x.descripcion||''}</td><td class="m">${x.tipo==='gasto'?money(x.monto):''}</td><td class="m">${x.tipo==='deposito'?money(x.monto):''}</td></tr>`).join('')+'</table>':'<p class="mut">No hay movimientos en este mes.</p>';
+    document.getElementById('reportCard').classList.remove('hide');
+  }catch(e){alert(e.message);}
+};
+loadData(); setInterval(loadData,15000);
 </script>
 </body>
 </html>
